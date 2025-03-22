@@ -138,6 +138,12 @@ func (db *Database) migrate() error {
 	if err == nil {
 		err = db.migration20220101070000(verbose)
 	}
+	if err == nil {
+		err = db.migration20250321180900(verbose)
+	}
+	if err == nil {
+		err = db.migration20250322153000(verbose)
+	}
 
 	return err
 }
@@ -569,6 +575,83 @@ func (db *Database) migration20220101070000(verbose bool) error {
 		}
 	}
 	return db.migrateWithSchema("20220101070000-v6.1.0", queries, verbose)
+}
+
+func (db *Database) migration20250321180900(verbose bool) error {
+	var queries []string
+
+	// We'll handle SQLite, PostgreSQL, MySQL differently:
+	if db.Config.DbType == DbTypeSqlite {
+		// SQLite syntax:
+		queries = []string{
+			"alter table `rdioScannerCalls` add column `audioUrl` TEXT",
+		}
+
+	} else if db.Config.DbType == DbTypePostgresql {
+		// Postgres syntax:
+		queries = []string{
+			"alter table rdioScannerCalls add column audioUrl TEXT",
+		}
+
+	} else {
+		// MySQL or any other dialect:
+		queries = []string{
+			"alter table `rdioScannerCalls` add column `audioUrl` TEXT",
+		}
+	}
+
+	// Use the built-in helper to run these queries (and record the migration)
+	return db.migrateWithSchema("migration20250321180900-add-audio-url", queries, verbose)
+}
+
+func (db *Database) migration20250322153000(verbose bool) error {
+	var queries []string
+
+	if db.Config.DbType == DbTypeSqlite {
+		queries = []string{
+			`create table "rdioScannerCalls2" (
+				"id" integer primary key autoincrement,
+				"audio" longblob,
+				"audioName" varchar(255),
+				"audioType" varchar(255),
+				"dateTime" datetime not null,
+				"frequencies" text not null,
+				"frequency" integer,
+				"patches" text not null,
+				"source" integer,
+				"sources" text not null,
+				"system" integer not null,
+				"talkgroup" integer not null,
+				"audioUrl" text
+			)`,
+
+			`insert into "rdioScannerCalls2"
+				select "id", "audio", "audioName", "audioType", "dateTime",
+				       "frequencies", "frequency", "patches", "source", "sources",
+				       "system", "talkgroup", "audioUrl"
+				from "rdioScannerCalls"`,
+
+			`drop table "rdioScannerCalls"`,
+
+			`alter table "rdioScannerCalls2" rename to "rdioScannerCalls"`,
+
+			`create index "rdio_scanner_calls_date_time_system_talkgroup" 
+				on "rdioScannerCalls" ("dateTime", "system", "talkgroup")`,
+		}
+
+	} else if db.Config.DbType == DbTypePostgresql {
+		queries = []string{
+			`alter table rdioScannerCalls alter column audio drop not null`,
+		}
+
+	} else {
+		queries = []string{
+			`alter table rdioScannerCalls modify column audio longblob null`,
+		}
+	}
+
+	// Use your built-in method to run these queries
+	return db.migrateWithSchema("migration20250322153000-audio-column-nullable", queries, verbose)
 }
 
 func (db *Database) prepareMigration() (bool, error) {

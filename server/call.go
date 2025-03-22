@@ -29,6 +29,7 @@ import (
 type Call struct {
 	Id             any       `json:"id"`
 	Audio          []byte    `json:"audio"`
+	AudioUrl       string    `json:"audioUrl"`
 	AudioName      any       `json:"audioName"`
 	AudioType      any       `json:"audioType"`
 	DateTime       time.Time `json:"dateTime"`
@@ -58,9 +59,8 @@ func NewCall() *Call {
 func (call *Call) IsValid() (ok bool, err error) {
 	ok = true
 
-	if len(call.Audio) <= 44 {
-		ok = false
-		err = errors.New("no audio")
+	if len(call.Audio) <= 44 && call.AudioUrl == "" {
+		return false, errors.New("no audio or audioUrl")
 	}
 
 	if call.DateTime.Unix() == 0 {
@@ -92,6 +92,7 @@ func (call *Call) MarshalJSON() ([]byte, error) {
 			"type": "Buffer",
 		},
 		"audioName":   call.AudioName,
+		"audioUrl":    call.AudioUrl,
 		"audioType":   call.AudioType,
 		"dateTime":    call.DateTime.Format(time.RFC3339),
 		"frequencies": call.Frequencies,
@@ -146,6 +147,7 @@ func (calls *Calls) CheckDuplicate(call *Call, msTimeFrame uint, db *Database) b
 func (calls *Calls) GetCall(id uint, db *Database) (*Call, error) {
 	var (
 		audioName   sql.NullString
+		audioUrl    sql.NullString
 		audioType   sql.NullString
 		dateTime    any
 		frequency   sql.NullFloat64
@@ -161,17 +163,21 @@ func (calls *Calls) GetCall(id uint, db *Database) (*Call, error) {
 
 	call := Call{Id: id}
 
-	query := fmt.Sprintf("select `audio`, `audioName`, `audioType`, `DateTime`, `frequencies`, `frequency`, `patches`, `source`, `sources`, `system`, `talkgroup` from `rdioScannerCalls` where `id` = %v", id)
+	query := fmt.Sprintf("select `audio`, `audioName`,`audioUrl`, `audioType`, `DateTime`, `frequencies`, `frequency`, `patches`, `source`, `sources`, `system`, `talkgroup` from `rdioScannerCalls` where `id` = %v", id)
 	if db.Config.DbType == DbTypePostgresql {
-		query = fmt.Sprintf("select audio, audioName, audioType, DateTime, frequencies, frequency, patches, source, sources, system, talkgroup from rdioScannerCalls where id = %v", id)
+		query = fmt.Sprintf("select audio, audioName, audioUrl, audioType, DateTime, frequencies, frequency, patches, source, sources, system, talkgroup from rdioScannerCalls where id = %v", id)
 	}
-	err := db.Sql.QueryRow(query).Scan(&call.Audio, &audioName, &audioType, &dateTime, &frequencies, &frequency, &patches, &source, &sources, &call.System, &call.Talkgroup)
+	err := db.Sql.QueryRow(query).Scan(&call.Audio, &audioName, &audioUrl, &audioType, &dateTime, &frequencies, &frequency, &patches, &source, &sources, &call.System, &call.Talkgroup)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("getcall: %v, %v", err, query)
 	}
 
 	if audioName.Valid {
 		call.AudioName = audioName.String
+	}
+
+	if audioUrl.Valid {
+		call.AudioUrl = audioUrl.String
 	}
 
 	if audioType.Valid {
@@ -525,7 +531,7 @@ func (calls *Calls) WriteCall(call *Call, db *Database) (uint, error) {
 
 	if db.Config.DbType == DbTypePostgresql {
 		if call.Id != nil {
-			if _, err = db.Sql.Exec("insert into rdioScannerCalls (id, audio, audioName, audioType, dateTime, frequencies, frequency, patches, source, sources, system, talkgroup) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)", call.Id, call.Audio, call.AudioName, call.AudioType, call.DateTime, frequencies, call.Frequency, patches, call.Source, sources, call.System, call.Talkgroup); err != nil {
+			if _, err = db.Sql.Exec("insert into rdioScannerCalls (id, audio, audioName, audioUrl, audioType, dateTime, frequencies, frequency, patches, source, sources, system, talkgroup) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", call.Id, call.Audio, call.AudioName, call.AudioUrl, call.AudioType, call.DateTime, frequencies, call.Frequency, patches, call.Source, sources, call.System, call.Talkgroup); err != nil {
 				return 0, formatError(err)
 			}
 			callInt, ok := call.Id.(int)
@@ -535,14 +541,14 @@ func (calls *Calls) WriteCall(call *Call, db *Database) (uint, error) {
 			return 0, formatError(err)
 		} else {
 			var uid int
-			err = db.Sql.QueryRow("insert into rdioScannerCalls (audio, audioName, audioType, dateTime, frequencies, frequency, patches, source, sources, system, talkgroup) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id", call.Audio, call.AudioName, call.AudioType, call.DateTime, frequencies, call.Frequency, patches, call.Source, sources, call.System, call.Talkgroup).Scan(&uid)
+			err = db.Sql.QueryRow("insert into rdioScannerCalls (audio, audioName, audioUrl, audioType, dateTime, frequencies, frequency, patches, source, sources, system, talkgroup) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id", call.Audio, call.AudioName, call.AudioUrl, call.AudioType, call.DateTime, frequencies, call.Frequency, patches, call.Source, sources, call.System, call.Talkgroup).Scan(&uid)
 			if err != nil {
 				return 0, formatError(err)
 			}
 			return uint(uid), nil
 		}
 	} else {
-		if res, err = db.Sql.Exec("insert into `rdioScannerCalls` (`id`, `audio`, `audioName`, `audioType`, `dateTime`, `frequencies`, `frequency`, `patches`, `source`, `sources`, `system`, `talkgroup`) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", call.Id, call.Audio, call.AudioName, call.AudioType, call.DateTime, frequencies, call.Frequency, patches, call.Source, sources, call.System, call.Talkgroup); err != nil {
+		if res, err = db.Sql.Exec("insert into `rdioScannerCalls` (`id`, `audio`, `audioName`, audioUrl, `audioType`, `dateTime`, `frequencies`, `frequency`, `patches`, `source`, `sources`, `system`, `talkgroup`) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", call.Id, call.Audio, call.AudioName, call.AudioUrl, call.AudioType, call.DateTime, frequencies, call.Frequency, patches, call.Source, sources, call.System, call.Talkgroup); err != nil {
 			return 0, formatError(err)
 		}
 

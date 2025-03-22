@@ -483,7 +483,7 @@ export class RdioScannerService implements OnDestroy {
             this.call = this.callQueue.shift();
         }
 
-        if (!this.call?.audio) {
+        if (!this.call || (!this.call.audio && !this.call.audioUrl)) {
             return;
         }
 
@@ -491,48 +491,39 @@ export class RdioScannerService implements OnDestroy {
             ? this.getPlaybackQueueCount()
             : this.callQueue.length;
 
-        const arrayBuffer = new ArrayBuffer(this.call.audio.data.length);
-        const arrayBufferView = new Uint8Array(arrayBuffer);
-
-        for (let i = 0; i < (this.call.audio.data.length); i++) {
-            arrayBufferView[i] = this.call.audio.data[i];
+        if (this.call.audioUrl) {
+            this.fetchAudioBuffer(this.call.audioUrl)
+                .then(arrayBuffer => {
+                    this.decodeAndPlay(arrayBuffer, queue);
+                })
+                .catch(err => {
+                    console.error('Audio URL fetch error:', err);
+                    // If fetch fails, skip
+                    this.event.emit({ call: this.call, queue });
+                    this.skip({ delay: false });
+                });
+            return;
         }
 
-        this.audioContext?.decodeAudioData(arrayBuffer, (buffer) => {
-            if (!this.audioContext || this.audioSource || !this.call) {
-                return;
+        if (this.call.audio?.data?.length) {
+            const arrayBuffer = new ArrayBuffer(this.call.audio.data.length);
+            const view = new Uint8Array(arrayBuffer);
+            for (let i = 0; i < this.call.audio.data.length; i++) {
+                view[i] = this.call.audio.data[i];
             }
-
-            this.audioSource = this.audioContext.createBufferSource();
-            this.audioSource.buffer = buffer;
-            this.audioSource.connect(this.audioContext.destination);
-            this.audioSource.onended = () => this.skip({ delay: true });
-            this.audioSource.start();
-
-            this.event.emit({ call: this.call, queue });
-
-            interval(500).pipe(takeWhile(() => !!this.call)).subscribe(() => {
-                if (this.audioContext && !isNaN(this.audioContext.currentTime)) {
-                    if (isNaN(this.audioSourceStartTime)) {
-                        this.audioSourceStartTime = this.audioContext.currentTime;
-                    }
-
-                    if (!this.livefeedPaused) {
-                        this.event.emit({ time: this.audioContext.currentTime - this.audioSourceStartTime });
-                    }
-                }
-            });
-        }, () => {
-            this.event.emit({ call: this.call, queue });
-
-            this.skip({ delay: false });
-        });
+            this.decodeAndPlay(arrayBuffer, queue);
+        }
     }
 
     queue(call: RdioScannerCall, options?: { priority?: boolean }): void {
-        if (!call?.audio || this.livefeedMode === RdioScannerLivefeedMode.Offline) {
+        if ((!call?.audio || !call.audio.data?.length) && !call?.audioUrl) {
             return;
         }
+
+        if (this.livefeedMode === RdioScannerLivefeedMode.Offline) {
+            return;
+        }
+
 
         if (options?.priority) {
             this.callQueue.unshift(call);
@@ -802,6 +793,24 @@ export class RdioScannerService implements OnDestroy {
     }
 
     private download(call: RdioScannerCall): void {
+        if (call.audioUrl) {
+            const fileName = call.audioName || 'unknown.dat';
+
+            const el = this.document.createElement('a');
+            el.style.display = 'none';
+            el.setAttribute('href', call.audioUrl);
+
+            el.setAttribute('download', fileName);
+
+            this.document.body.appendChild(el);
+
+            el.click();
+
+            this.document.body.removeChild(el);
+
+            return;
+        }
+
         if (call.audio) {
             const file = call.audio.data.reduce((str, val) => str += String.fromCharCode(val), '');
             const fileName = call.audioName || 'unknown.dat';
@@ -887,19 +896,21 @@ export class RdioScannerService implements OnDestroy {
             switch (message[0]) {
                 case WebsocketCommand.Call:
                     if (message[1] !== null) {
-                        const call: RdioScannerCall = message[1];
+                        const rawCall: RdioScannerCall = message[1];
+
                         const flag: string = message[2];
 
                         if (flag === WebsocketCallFlag.Download) {
                             this.download(message[1]);
 
-                        } else if (flag === WebsocketCallFlag.Play && call.id === this.playbackPending) {
+                        } else if (flag === WebsocketCallFlag.Play && rawCall.id === this.playbackPending) {
                             this.playbackPending = undefined;
-
-                            this.queue(this.transformCall(call), { priority: true });
+                            const transformed = this.transformCall(rawCall);
+                            this.queue(transformed, { priority: true });
 
                         } else {
-                            this.queue(this.transformCall(call));
+                            const transformed = this.transformCall(rawCall);
+                            this.queue(transformed);
                         }
                     }
 
@@ -1205,4 +1216,64 @@ export class RdioScannerService implements OnDestroy {
 
         return call;
     }
+
+    /////////////////////////////////////////////////////////
+    // Helper function to fetch remote audio as ArrayBuffer
+    /////////////////////////////////////////////////////////
+
+    private fetchAudioBuffer(url: string): Promise<ArrayBuffer> {
+        return fetch(url).then(response => {
+            if (!response.ok) {
+                throw new Error(`Network error: ${response.status}`);
+            }
+            return response.arrayBuffer();
+        });
+    }
+
+    ////////////////////////////////////////////////////////////////
+    // Reusable Helper function to decode audio data and start playback
+    ////////////////////////////////////////////////////////////////
+    private decodeAndPlay(arrayBuffer: ArrayBuffer, queue: number): void {
+        // If something changed mid-process, or we have no audioContext, stop.
+        if (!this.call || !this.audioContext) {
+            return;
+        }
+
+        this.audioContext.decodeAudioData(
+            arrayBuffer,
+            (buffer) => {
+                if (!this.audioContext || this.audioSource || !this.call) {
+                    return;
+                }
+
+                this.audioSource = this.audioContext.createBufferSource();
+                this.audioSource.buffer = buffer;
+                this.audioSource.connect(this.audioContext.destination);
+
+                this.audioSource.onended = () => this.skip({ delay: true });
+
+                this.audioSource.start();
+
+                this.event.emit({ call: this.call, queue });
+
+                interval(500).pipe(takeWhile(() => !!this.call)).subscribe(() => {
+                    if (this.audioContext && !isNaN(this.audioContext.currentTime)) {
+                        if (isNaN(this.audioSourceStartTime)) {
+                            this.audioSourceStartTime = this.audioContext.currentTime;
+                        }
+                        if (!this.livefeedPaused) {
+                            this.event.emit({
+                                time: this.audioContext.currentTime - this.audioSourceStartTime
+                            });
+                        }
+                    }
+                });
+            },
+            () => {
+                this.event.emit({ call: this.call, queue });
+                this.skip({ delay: false });
+            }
+        );
+    }
+
 }

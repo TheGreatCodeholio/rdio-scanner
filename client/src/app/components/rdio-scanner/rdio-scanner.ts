@@ -47,6 +47,7 @@ export interface RdioScannerCall {
         data: number[];
     };
     audioName?: string;
+    audioUrl?: string;
     audioType?: string;
     dateTime: Date;
     frequencies?: RdioScannerCallFrequency[];

@@ -237,13 +237,15 @@ func ParseSdrTrunkMeta(call *Call, controller *Controller) error {
 func ParseMultipartContent(call *Call, p *multipart.Part, b []byte) {
 	switch p.FormName() {
 	case "audio":
-		call.Audio = b
-		call.AudioName = p.FileName()
-
+		if call.AudioUrl == "" {
+			call.Audio = b
+			call.AudioName = p.FileName()
+		}
 	case "audioName":
 		call.AudioName = string(b)
 		call.AudioType = mime.TypeByExtension(path.Ext(string(b)))
-
+	case "audioUrl":
+		call.AudioUrl = string(b)
 	case "dateTime":
 		if regexp.MustCompile(`^[0-9]+$`).Match(b) {
 			if i, err := strconv.Atoi(string(b)); err == nil {

@@ -76,6 +76,10 @@ func (api *Api) CallUploadHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if call.AudioUrl != "" {
+			call.Audio = nil
+		}
+
 		if ok, err := call.IsValid(); ok {
 			api.HandleCall(key, call, w)
 		} else {
@@ -163,6 +167,10 @@ func (api *Api) TrunkRecorderCallUploadHandler(w http.ResponseWriter, r *http.Re
 
 		for p, b := range parts {
 			ParseMultipartContent(call, p, b)
+		}
+
+		if call.AudioUrl != "" {
+			call.Audio = nil
 		}
 
 		if ok, err := call.IsValid(); ok {
