@@ -108,7 +108,7 @@ func (controller *Controller) IngestCall(call *Call) {
 	)
 
 	logCall := func(call *Call, level string, message string) {
-		controller.Logs.LogEvent(level, fmt.Sprintf("newcall: system=%v talkgroup=%v file=%v %v", call.System, call.Talkgroup, call.AudioName, message))
+		controller.Logs.LogEvent(level, fmt.Sprintf("newcall: system=%v talkgroup=%v audioUrl=%v file=%v %v", call.System, call.Talkgroup, call.AudioUrl, call.AudioName, message))
 	}
 
 	logError := func(err error) {
@@ -280,8 +280,10 @@ func (controller *Controller) IngestCall(call *Call) {
 		}
 	}
 
-	if err := controller.FFMpeg.Convert(call, controller.Systems, controller.Tags, controller.Options.AudioConversion, controller.Options.AudioBitrate); err != nil {
-		controller.Logs.LogEvent(LogLevelWarn, err.Error())
+	if call.AudioUrl == "" {
+		if err := controller.FFMpeg.Convert(call, controller.Systems, controller.Tags, controller.Options.AudioConversion, controller.Options.AudioBitrate); err != nil {
+			controller.Logs.LogEvent(LogLevelWarn, err.Error())
+		}
 	}
 
 	if id, err = controller.Calls.WriteCall(call, controller.Database); err == nil {
