@@ -1,0 +1,147 @@
+// Drawer sits in the chassis area between the LCD and the rdio-button
+// cluster. Styling reuses the chassis primitives from .rdio-button: solid
+// dark fill, 1-px border bevel (TOP+LEFT light / BOTTOM+RIGHT dark),
+// white text with shadow. The time readout sits in its own little LCD
+// strip so it reads as a real piece of display glass, not chassis paint.
+
+$rdio-chassis: rgb(45, 45, 45);
+$rdio-chassis-text: rgb(250, 250, 250);
+$rdio-bevel-light: rgba(255, 255, 255, 0.7);
+$rdio-bevel-dark: rgba(0, 0, 0, 0.87);
+$rdio-lcd-bg: rgb(209, 238, 238);
+$rdio-lcd-text: rgba(0, 0, 0, 0.8);
+$rdio-led: rgb(0, 230, 118);
+
+%rdio-bevel {
+  background: $rdio-chassis;
+  border-bottom-color: $rdio-bevel-dark;
+  border-left-color: $rdio-bevel-light;
+  border-right-color: $rdio-bevel-dark;
+  border-style: solid;
+  border-top-color: $rdio-bevel-light;
+  border-width: 1px;
+  color: $rdio-chassis-text;
+  cursor: pointer;
+  font-family: inherit;
+  outline: 0;
+  text-shadow: 0 0 4px rgb(0, 0, 0);
+}
+
+.rdio-drawer {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+
+  .rdio-drawer-handle {
+    @extend %rdio-bevel;
+    align-items: center;
+    display: flex;
+    height: 14px;
+    justify-content: center;
+    padding: 0;
+    width: 100%;
+
+    mat-icon {
+      font-size: 16px;
+      height: 14px;
+      line-height: 14px;
+      opacity: 0.85;
+      width: 16px;
+    }
+
+    &:active {
+      position: relative;
+      top: 1px;
+    }
+
+    &:focus-visible {
+      outline: 1px dotted $rdio-led;
+      outline-offset: 1px;
+    }
+  }
+
+  // max-height transition lets the drawer animate without measuring
+  // content height. 220 px covers both rows comfortably.
+  .rdio-drawer-content {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 220ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 180ms ease;
+  }
+
+  &.open .rdio-drawer-content {
+    max-height: 220px;
+    opacity: 1;
+  }
+
+  // First row — play/pause | seek bar (waveform) | LCD-style time chip.
+  .rdio-drawer-row {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    padding: 10px 2px 6px;
+
+    .rdio-scrub {
+      flex: 1;
+      margin: 0;
+    }
+  }
+
+  // Square chunky play/pause matching .rdio-button family.
+  .rdio-drawer-iconbtn {
+    @extend %rdio-bevel;
+    align-items: center;
+    display: flex;
+    flex-shrink: 0;
+    height: 30px;
+    justify-content: center;
+    padding: 0;
+    position: relative;
+    width: 34px;
+
+    mat-icon {
+      font-size: 20px;
+      height: 20px;
+      line-height: 20px;
+      width: 20px;
+    }
+
+    &:active {
+      top: 1px;
+      transform: scale(0.98);
+      transform-origin: bottom center;
+    }
+
+    &:focus-visible {
+      outline: 1px dotted $rdio-led;
+      outline-offset: 1px;
+    }
+  }
+
+  // Time readout — small recessed LCD strip showing m:ss / m:ss in the
+  // same color combo as the main display (dark text on cyan-green).
+  .rdio-drawer-time {
+    background: $rdio-lcd-bg;
+    box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) inset,
+      -1px -1px 1px rgba(255, 255, 255, 0.4);
+    color: $rdio-lcd-text;
+    flex-shrink: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    line-height: 14px;
+    min-width: 78px;
+    padding: 4px 8px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  // The relocated volume row drops its own bottom margin — drawer
+  // padding spaces it from the chassis below.
+  .rdio-volume {
+    margin-bottom: 0;
+    padding: 4px 2px 10px;
+  }
+}
