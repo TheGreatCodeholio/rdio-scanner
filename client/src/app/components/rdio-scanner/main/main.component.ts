@@ -205,14 +205,29 @@ export class RdioScannerMainComponent implements OnDestroy, OnInit {
         }
     }
 
-    // formatTime renders seconds as m:ss for the drawer's time label.
-    // Defensive against NaN / negative inputs that could appear briefly
-    // during state transitions.
+    // formatTime renders seconds as m:ss.mmm for the drawer's LCD chip,
+    // scaling up to h:mm:ss.mmm past the one-hour mark. Defensive against
+    // NaN / negative inputs that can appear briefly during state changes.
     formatTime(seconds: number | undefined): string {
-        if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
-        const m = Math.floor(seconds / 60);
-        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
+        if (!seconds || isNaN(seconds) || seconds < 0) return '0:00.000';
+        const totalMs = Math.round(seconds * 1000);
+        const ms = totalMs % 1000;
+        const totalSec = Math.floor(totalMs / 1000);
+        const s = totalSec % 60;
+        const totalMin = Math.floor(totalSec / 60);
+        const m = totalMin % 60;
+        const h = Math.floor(totalMin / 60);
+        const pad = (n: number, w: number) => n.toString().padStart(w, '0');
+        if (h > 0) return `${h}:${pad(m, 2)}:${pad(s, 2)}.${pad(ms, 3)}`;
+        return `${m}:${pad(s, 2)}.${pad(ms, 3)}`;
+    }
+
+    // True when audio is actively playing — drives the .idle class on
+    // the drawer time chip so it lights up cyan during playback and
+    // dims to the LCD's idle tone otherwise. Matches the existing LCD
+    // pattern (.rdio-display.idle → muted background).
+    get isPlaying(): boolean {
+        return !!this.call && !this.livefeedPaused;
     }
 
     onScrub(ev: Event): void {

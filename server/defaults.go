@@ -100,7 +100,7 @@ var defaults Defaults = Defaults{
 	},
 	keypadBeeps: "uniden",
 	options: DefaultOptions{
-		audioConversion:             AUDIO_CONVERSION_ENABLED_NORM,
+		audioConversion:             AUDIO_CONVERSION_ENABLED,
 		autoPopulate:                true,
 		dimmerDelay:                 5000,
 		disableDuplicateDetection:   false,

@@ -75,11 +75,12 @@ func (options *Options) FromMap(m map[string]any) *Options {
 	default:
 		options.MaxClients = defaults.options.audioConversion
 	}
-	// Legacy values (0=disabled, 1=enabled-no-normalization) collapse to
-	// the new default ("norm"). The admin UI now exposes only Norm and
-	// Loudnorm, and conversion to M4A is unconditional in ffmpeg.go.
-	if options.AudioConversion < AUDIO_CONVERSION_ENABLED_NORM {
-		options.AudioConversion = AUDIO_CONVERSION_ENABLED_NORM
+	// Legacy value 0 was "DISABLED" (passthrough — no transcode). The
+	// transcode-to-M4A step is unconditional now; map 0 to "Off-norm"
+	// (mode 1) so the user's intent ("don't normalize") is preserved
+	// even though the audio is now always M4A.
+	if options.AudioConversion == AUDIO_CONVERSION_DISABLED {
+		options.AudioConversion = AUDIO_CONVERSION_ENABLED
 	}
 
 	switch v := m["autoPopulate"].(type) {
@@ -260,11 +261,11 @@ func (options *Options) Read(db *Database) error {
 					options.AudioConversion = uint(v)
 				}
 			}
-			// Migrate legacy DB rows (0=disabled, 1=enabled-no-norm) to
-			// the new default ("norm"). Conversion is now unconditional;
-			// the value only selects the loudness filter.
-			if options.AudioConversion < AUDIO_CONVERSION_ENABLED_NORM {
-				options.AudioConversion = AUDIO_CONVERSION_ENABLED_NORM
+			// Legacy value 0 (DISABLED — passthrough) is no longer
+			// meaningful: M4A conversion is unconditional. Map it to
+			// mode 1 ("Off-normalization") to preserve user intent.
+			if options.AudioConversion == AUDIO_CONVERSION_DISABLED {
+				options.AudioConversion = AUDIO_CONVERSION_ENABLED
 			}
 		case "autoPopulate":
 			if err = json.Unmarshal([]byte(value.String), &f); err == nil {

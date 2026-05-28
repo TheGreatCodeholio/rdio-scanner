@@ -12,12 +12,14 @@
     <div class="row">
       <p>
         <span class="mat-body">Audio Normalization</span><br>
-        <span class="mat-caption">All incoming audio is transcoded to M4A (AAC) via ffmpeg. Choose how
-        loudness is normalized: Norm uses EBU&nbsp;R128 defaults (quieter, more headroom); Loudnorm
-        targets broadcast-loud (I=-16&nbsp;LUFS, TP=-1.5, LRA=11).</span>
+        <span class="mat-caption">All incoming audio is transcoded to M4A (AAC) via ffmpeg. This option
+        only selects loudness normalization: Off leaves the audio as-recorded; Norm uses EBU&nbsp;R128
+        defaults (quieter, more headroom); Loudnorm targets broadcast-loud (I=-16&nbsp;LUFS, TP=-1.5,
+        LRA=11).</span>
       </p>
       <mat-form-field floatLabel="auto">
         <mat-select formControlName="audioConversion" placeholder="Audio Normalization">
+          <mat-option [value]="1">Off</mat-option>
           <mat-option [value]="2">Norm</mat-option>
           <mat-option [value]="3">Loudnorm</mat-option>
         </mat-select>
