@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path"
 	"regexp"
@@ -65,29 +66,41 @@ func NewFFMpeg() *FFMpeg {
 	return ffmpeg
 }
 
-// Convert transcodes the incoming audio to M4A (AAC) so every stored call
-// has the same container/codec — the rest of the stack (frontend decoder,
-// scrub bar, downstream consumers) only has to handle one format. The
-// `mode` argument selects the loudness-normalization filter, not whether
-// to convert: conversion is unconditional now.
+// Convert transcodes the incoming audio to M4A (AAC). Conversion to M4A
+// happens for every mode — the `mode` argument only selects which (if
+// any) loudness-normalization filter to apply.
 //
 // Modes:
-//   AUDIO_CONVERSION_ENABLED_NORM      — EBU R128 loudnorm with defaults
-//   AUDIO_CONVERSION_ENABLED_LOUD_NORM — broadcast-loud loudnorm
+//   AUDIO_CONVERSION_ENABLED           — M4A only, no normalization
+//   AUDIO_CONVERSION_ENABLED_NORM      — M4A + EBU R128 loudnorm defaults
+//   AUDIO_CONVERSION_ENABLED_LOUD_NORM — M4A + broadcast-loud loudnorm
 //                                         (I=-16 LUFS, TP=-1.5, LRA=11)
-//   anything else                      — transcode only, no normalization
-//                                         (legacy values 0/1, normalized
-//                                         away at the options layer)
+//
+// Output goes to a temp file rather than stdout. A pipe-output forces
+// fragmented MP4 (one moof+mdat per AAC frame for audio-only — thousands
+// of fragments on long clips, which breaks some decoders). With a temp
+// file we can use +faststart so the moov atom lands at the start of a
+// properly-structured non-fragmented M4A.
 //
 // If ffmpeg is unavailable or the run fails, we return an error so the
-// controller logs it. The caller currently still stores the call with the
-// original audio; install ffmpeg to restore the "always M4A" guarantee.
+// controller logs it. The caller currently still stores the call with
+// the original audio; install ffmpeg to restore the "always M4A" guarantee.
 func (ffmpeg *FFMpeg) Convert(call *Call, systems *Systems, tags *Tags, mode uint) error {
 	if !ffmpeg.available {
 		return errors.New("ffmpeg is not available, audio cannot be transcoded to M4A")
 	}
 
-	args := []string{"-i", "-"}
+	tmp, err := os.CreateTemp("", "rdio-ffmpeg-*.m4a")
+	if err != nil {
+		return fmt.Errorf("ffmpeg: temp output: %w", err)
+	}
+	tmpName := tmp.Name()
+	// Close the handle so ffmpeg can write to it on every platform
+	// (Windows would otherwise refuse the open).
+	tmp.Close()
+	defer os.Remove(tmpName)
+
+	args := []string{"-y", "-i", "-"}
 
 	if tag, ok := tags.GetTagById(call.Talkgroup.TagId); ok {
 		args = append(args,
@@ -111,22 +124,30 @@ func (ffmpeg *FFMpeg) Convert(call *Call, systems *Systems, tags *Tags, mode uin
 		}
 	}
 
-	args = append(args, "-c:a", "aac", "-b:a", "32k", "-movflags", "frag_keyframe+empty_moov", "-f", "ipod", "-")
+	args = append(args,
+		"-c:a", "aac",
+		"-b:a", "32k",
+		"-ac", "1", // force mono so a stereo input doesn't split bits 16/16
+		"-movflags", "+faststart",
+		tmpName,
+	)
 
 	cmd := exec.Command("ffmpeg", args...)
 	cmd.Stdin = bytes.NewReader(call.Audio)
 
-	stdout := bytes.NewBuffer([]byte(nil))
-	cmd.Stdout = stdout
-
-	stderr := bytes.NewBuffer([]byte(nil))
+	stderr := bytes.NewBuffer(nil)
 	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg conversion failed: %s: %s", err.Error(), strings.TrimSpace(stderr.String()))
 	}
 
-	call.Audio = stdout.Bytes()
+	out, err := os.ReadFile(tmpName)
+	if err != nil {
+		return fmt.Errorf("ffmpeg: read output: %w", err)
+	}
+
+	call.Audio = out
 	call.AudioFilename = fmt.Sprintf("%v.m4a", strings.TrimSuffix(call.AudioFilename, path.Ext(call.AudioFilename)))
 	call.AudioMime = "audio/mp4"
 

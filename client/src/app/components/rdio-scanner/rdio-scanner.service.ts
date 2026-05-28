@@ -596,7 +596,10 @@ export class RdioScannerService implements OnDestroy {
             // Spin up a fresh time-tick poller now that we're playing
             // again — the previous one self-terminated when this.call
             // went undefined.
-            interval(500).pipe(takeWhile(() => !!this.call)).subscribe(() => {
+            // 100 ms tick gives the drawer's m:ss.mmm chip 10 distinct
+            // milliseconds-field values per second (much smoother than
+            // the previous 500 ms cadence) while staying well below RAF.
+            interval(100).pipe(takeWhile(() => !!this.call)).subscribe(() => {
                 if (this.audioContext && !isNaN(this.audioContext.currentTime) && !this.livefeedPaused) {
                     this.event.emit({ time: this.audioContext.currentTime - this.audioSourceStartTime });
                 }
@@ -738,7 +741,10 @@ export class RdioScannerService implements OnDestroy {
                 queue,
             });
 
-            interval(500).pipe(takeWhile(() => !!this.call)).subscribe(() => {
+            // 100 ms tick gives the drawer's m:ss.mmm chip 10 distinct
+            // milliseconds-field values per second (much smoother than
+            // the previous 500 ms cadence) while staying well below RAF.
+            interval(100).pipe(takeWhile(() => !!this.call)).subscribe(() => {
                 if (this.audioContext && !isNaN(this.audioContext.currentTime)) {
                     if (isNaN(this.audioSourceStartTime)) {
                         this.audioSourceStartTime = this.audioContext.currentTime;

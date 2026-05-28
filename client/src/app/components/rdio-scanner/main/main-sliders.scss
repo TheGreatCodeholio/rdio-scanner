@@ -15,9 +15,12 @@
     position: absolute;
     width: 100%;
 
-    .rdio-waveform-bg rect { fill: rgba(0, 50, 25, 0.6); }
+    // Unplayed bars: same LCD-green hue as the played bars, 40% alpha,
+    // so they stay readable against the dark chassis background while
+    // still reading as subordinate to the bright played overlay.
+    .rdio-waveform-bg rect { fill: rgba(0, 230, 118, 0.4); }
     .rdio-waveform-fg rect { fill: rgb(0, 230, 118); }
-    .rdio-waveform-marks rect { fill: rgba(255, 255, 255, 0.18); }
+    .rdio-waveform-marks rect { fill: rgba(255, 255, 255, 0.35); }
   }
 
   .rdio-scrub-input {
@@ -40,12 +43,12 @@
     // as a fallback when peaks haven't loaded yet.
     &::-webkit-slider-runnable-track {
       background: transparent;
-      box-shadow: inset 0 14px 0 -13.5px rgba(0, 0, 0, 0.4);
+      box-shadow: inset 0 14px 0 -13.5px rgba(0, 230, 118, 0.3);
       height: 28px;
     }
     &::-moz-range-track {
       background: transparent;
-      box-shadow: inset 0 14px 0 -13.5px rgba(0, 0, 0, 0.4);
+      box-shadow: inset 0 14px 0 -13.5px rgba(0, 230, 118, 0.3);
       height: 28px;
     }
 

@@ -119,12 +119,16 @@ $rdio-led: rgb(0, 230, 118);
     }
   }
 
-  // Time readout — small recessed LCD strip showing m:ss / m:ss in the
-  // same color combo as the main display (dark text on cyan-green).
+  // Time readout — small recessed LCD strip showing m:ss.mmm / m:ss.mmm
+  // (or h:mm:ss.mmm past one hour). When playing it sits in the bright
+  // LCD-cyan tone; when idle it dims to the muted background the main
+  // .rdio-display uses for its own idle state, so both displays share
+  // their lit/dull cadence.
   .rdio-drawer-time {
     background: $rdio-lcd-bg;
     box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) inset,
-      -1px -1px 1px rgba(255, 255, 255, 0.4);
+      -1px -1px 1px rgba(255, 255, 255, 0.4),
+      0 0 4px rgba(0, 230, 200, 0.35);
     color: $rdio-lcd-text;
     flex-shrink: 0;
     font-family: 'Courier New', monospace;
@@ -132,10 +136,19 @@ $rdio-led: rgb(0, 230, 118);
     font-weight: 500;
     letter-spacing: 0.5px;
     line-height: 14px;
-    min-width: 78px;
+    min-width: 108px;
     padding: 4px 8px;
     text-align: center;
+    transition: background-color 200ms ease, box-shadow 200ms ease,
+      color 200ms ease;
     white-space: nowrap;
+
+    &.idle {
+      background: rgb(190, 190, 174);
+      box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) inset,
+        -1px -1px 1px rgba(255, 255, 255, 0.2);
+      color: rgba(0, 0, 0, 0.45);
+    }
   }
 
   // The relocated volume row drops its own bottom margin — drawer
