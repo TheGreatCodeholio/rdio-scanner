@@ -184,7 +184,7 @@
           (input)="onScrub($event)"
           aria-label="Playback position">
       </div>
-      <span class="rdio-drawer-time" [ngClass]="{ idle: !isPlaying }"
+      <span class="rdio-drawer-time" [ngClass]="{ idle: !dimmer }"
         aria-label="Playback time">
         {{ formatTime(callTime) }} / {{ formatTime(callDuration) }}
       </span>

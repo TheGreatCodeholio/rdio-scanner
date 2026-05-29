@@ -474,7 +474,17 @@ export class RdioScannerService implements OnDestroy {
         this.stop();
     }
 
-    pause(status = !this.livefeedPaused): void {
+    pause(status?: boolean): void {
+        // Default toggle is "is audio actually playing right now?" rather
+        // than "flip the paused flag". This matters in states where the
+        // flag is stale relative to actual playback — e.g., stopLivefeed
+        // clears the active source but doesn't touch livefeedPaused, so a
+        // strict flag-flip would interpret the next button press as Pause
+        // when the user actually wanted Play.
+        if (status === undefined) {
+            status = !!this.call && !this.livefeedPaused;
+        }
+
         this.livefeedPaused = status;
 
         if (status) {
@@ -483,7 +493,21 @@ export class RdioScannerService implements OnDestroy {
         } else {
             this.audioContext?.resume();
 
-            this.play();
+            if (this.call) {
+                // Resume of an active (suspended) call.
+                this.play();
+            } else if (this.lastPlayedBuffer) {
+                // No live call (live feed toggled off, or the last clip
+                // ended), but the decoded buffer is still around. Route
+                // through seek(0) so the user can hit play to replay the
+                // most recent call from the start regardless of livefeed
+                // mode.
+                this.seek(0);
+            } else {
+                // Nothing decoded yet; let play() pull from the queue if
+                // anything is waiting, otherwise it's a no-op.
+                this.play();
+            }
         }
 
         this.event.emit({ pause: this.livefeedPaused });
@@ -878,6 +902,10 @@ export class RdioScannerService implements OnDestroy {
 
         this.event.emit({ livefeedMode: this.livefeedMode, queue: 0 });
 
+        // Hard-stop the active source. stop() clears this.call /
+        // audioBuffer but leaves lastPlayedBuffer in place, so the
+        // drawer play button can still resurrect the most recent clip
+        // via pause()'s seek(0) fallback even though live feed is off.
         this.stop();
 
         this.sendtoWebsocket(WebsocketCommand.LivefeedMap, null);
