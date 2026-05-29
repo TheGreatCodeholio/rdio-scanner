@@ -238,21 +238,23 @@
       </span>
     </div>
 
-    <button type="button" class="icon-btn subtle"
-      [disabled]="!call" (click)="downloadCurrent()" aria-label="Download current">
-      <mat-icon>save_alt</mat-icon>
-    </button>
+    <div class="dock-actions">
+      <button type="button" class="icon-btn subtle"
+        [disabled]="!call" (click)="downloadCurrent()" aria-label="Download current">
+        <mat-icon>save_alt</mat-icon>
+      </button>
 
-    <button type="button" class="icon-btn subtle dock-permalink"
-      [disabled]="!call" (click)="copyPermalink()" aria-label="Copy permalink">
-      <mat-icon>link</mat-icon>
-    </button>
+      <button type="button" class="icon-btn subtle dock-permalink"
+        [disabled]="!call" (click)="copyPermalink()" aria-label="Copy permalink">
+        <mat-icon>link</mat-icon>
+      </button>
 
-    <div class="dock-autoplay" [class.on]="livefeedPlayback"
-      (click)="toggleAutoplay()" role="checkbox"
-      [attr.aria-checked]="livefeedPlayback" tabindex="0">
-      <span class="dock-led"></span>
-      <span class="dock-autoplay-label">Auto</span>
+      <div class="dock-autoplay" [class.on]="livefeedPlayback"
+        (click)="toggleAutoplay()" role="checkbox"
+        [attr.aria-checked]="livefeedPlayback" tabindex="0">
+        <span class="dock-led"></span>
+        <span class="dock-autoplay-label">Autoplay</span>
+      </div>
     </div>
   </footer>
 </div>
