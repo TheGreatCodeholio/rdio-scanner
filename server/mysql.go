@@ -118,6 +118,8 @@ var MysqlSchema = []string{
     "audioFilename" text NOT NULL,
     "audioMime" text NOT NULL,
     "audioPath" text NOT NULL,
+    "duration" integer NOT NULL DEFAULT 0,
+    "peaks" blob,
     "siteRef" integer NOT NULL DEFAULT 0,
     "systemId" bigint NOT NULL,
     "talkgroupId" bigint NOT NULL,

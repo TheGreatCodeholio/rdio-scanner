@@ -119,25 +119,6 @@
         <span class="results-loading">Searching…</span>
       }
       <span class="results-spacer"></span>
-      <div class="paginator-mini">
-        <button type="button" class="icon-btn subtle edge"
-          [disabled]="!canPrevPage()" (click)="firstPage()" aria-label="First page">
-          <mat-icon>first_page</mat-icon>
-        </button>
-        <button type="button" class="icon-btn subtle"
-          [disabled]="!canPrevPage()" (click)="prevPage()" aria-label="Previous page">
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        <span class="page-indicator">{{ pageIndicator() }}</span>
-        <button type="button" class="icon-btn subtle"
-          [disabled]="!canNextPage()" (click)="nextPage()" aria-label="Next page">
-          <mat-icon>chevron_right</mat-icon>
-        </button>
-        <button type="button" class="icon-btn subtle edge"
-          [disabled]="!canNextPage()" (click)="lastPage()" aria-label="Last page">
-          <mat-icon>last_page</mat-icon>
-        </button>
-      </div>
     </div>
 
     <div class="results-scroll" #scrollableResults>
@@ -146,7 +127,6 @@
           @if (item.kind === 'header') {
             <div class="date-header">
               <span class="date-label">{{ item.label }}</span>
-              <span class="date-count">{{ item.count }} on page</span>
             </div>
           } @else if (item.call) {
             <div class="result-card"
@@ -184,6 +164,14 @@
                   }
                 </div>
               </div>
+              <div class="wave-mini">
+                @if (item.call.peaks?.length && item.call.duration) {
+                  <canvas #rowCanvas
+                    [attr.data-call-id]="item.call.id"
+                    aria-label="Waveform thumbnail"></canvas>
+                }
+              </div>
+              <span class="dur">{{ formatDurShort(item.call.duration) }}</span>
               <button type="button" class="icon-btn subtle dl"
                 (click)="$event.stopPropagation(); download(+item.call.id)"
                 aria-label="Download">
@@ -198,6 +186,26 @@
           <div class="empty-state">No calls match the current filters.</div>
         }
       }
+    </div>
+
+    <div class="results-paginator" role="navigation" aria-label="Result pages">
+      <button type="button" class="pg-btn edge"
+        [disabled]="!canPrevPage()" (click)="firstPage()" aria-label="First page">
+        <mat-icon>first_page</mat-icon>
+      </button>
+      <button type="button" class="pg-btn"
+        [disabled]="!canPrevPage()" (click)="prevPage()" aria-label="Previous page">
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+      <span class="pg-readout">{{ pageIndicator() }}</span>
+      <button type="button" class="pg-btn"
+        [disabled]="!canNextPage()" (click)="nextPage()" aria-label="Next page">
+        <mat-icon>chevron_right</mat-icon>
+      </button>
+      <button type="button" class="pg-btn edge"
+        [disabled]="!canNextPage()" (click)="lastPage()" aria-label="Last page">
+        <mat-icon>last_page</mat-icon>
+      </button>
     </div>
   </main>
 

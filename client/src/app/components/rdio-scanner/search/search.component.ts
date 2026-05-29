@@ -23,7 +23,9 @@ import {
     Component,
     ElementRef,
     OnDestroy,
+    QueryList,
     ViewChild,
+    ViewChildren,
 } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -108,8 +110,10 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
 
     @ViewChild('dockCanvas', { static: false }) private dockCanvasRef: ElementRef<HTMLCanvasElement> | undefined;
     @ViewChild('scrollableResults', { static: false }) private scrollableResultsRef: ElementRef<HTMLDivElement> | undefined;
+    @ViewChildren('rowCanvas') private rowCanvases: QueryList<ElementRef<HTMLCanvasElement>> | undefined;
 
     private ribbon: WaveformRibbon | undefined;
+    private rowRibbons = new Map<number, WaveformRibbon>();
     private resultsResizeObserver: ResizeObserver | undefined;
 
     // Padding inside .results-scroll (must stay in sync with SCSS).
@@ -164,6 +168,14 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
     ngAfterViewInit(): void {
         this.mountRibbon();
         this.observeResultsResize();
+
+        // Each card has a `#rowCanvas` template ref. Whenever the QueryList
+        // emits (results re-render after pagination, filter change, or
+        // initial load) sync the per-row WaveformRibbon instances.
+        this.rowCanvases?.changes.subscribe(() => this.syncRowRibbons());
+        // First sync covers the case where cards are already in the DOM
+        // by the time AfterViewInit fires.
+        this.syncRowRibbons();
     }
 
     ngOnDestroy(): void {
@@ -171,6 +183,8 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
         this.querySubscription?.unsubscribe();
         this.ribbon?.destroy();
         this.ribbon = undefined;
+        this.rowRibbons.forEach((r) => r.destroy());
+        this.rowRibbons.clear();
         this.resultsResizeObserver?.disconnect();
         this.resultsResizeObserver = undefined;
     }
@@ -708,6 +722,62 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
         this.pageIndex = Math.floor(firstVisibleRow / newPageSize);
         this.refreshResults();
         this.ngChangeDetectorRef.detectChanges();
+    }
+
+    /** Render m:ss for a per-card duration. Returns a dash placeholder
+     *  when duration is unknown (pre-migration row), matching the
+     *  graceful-degradation contract documented in the type. */
+    formatDurShort(ms: number | undefined): string {
+        if (!ms || ms <= 0) return '—:——';
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = (totalSec % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
+
+    /** Mount/update/destroy the per-row mini waveform ribbons in sync
+     *  with the current page's <canvas #rowCanvas> elements. Called from
+     *  ngAfterViewInit and on every QueryList changes emission. */
+    private syncRowRibbons(): void {
+        if (!this.rowCanvases) return;
+
+        const seen = new Set<number>();
+        this.rowCanvases.forEach((ref) => {
+            const canvas = ref.nativeElement;
+            const idStr = canvas.dataset['callId'];
+            if (!idStr) return;
+            const id = parseInt(idStr, 10);
+            seen.add(id);
+
+            const row = this.playbackList?.results.find((c) => c?.id === id);
+            if (!row || !row.peaks?.length || !row.duration) return;
+
+            const existing = this.rowRibbons.get(id);
+            const durationSec = row.duration / 1000;
+            if (existing) {
+                existing.set({ peaks: row.peaks, duration: durationSec });
+            } else {
+                this.rowRibbons.set(id, new WaveformRibbon(canvas, {
+                    peaks: row.peaks,
+                    duration: durationSec,
+                    currentTime: 0,
+                    bgColor: 'rgba(0, 230, 118, 0.4)',
+                    fgColor: 'rgb(0, 230, 118)',
+                    cursorColor: 'rgb(220, 255, 235)',
+                    cursorWidth: 1.5,
+                    showCursor: false,
+                }));
+            }
+        });
+
+        // Destroy ribbons whose canvas is no longer in the DOM (page
+        // navigation moved off the row).
+        for (const [id, ribbon] of this.rowRibbons) {
+            if (!seen.has(id)) {
+                ribbon.destroy();
+                this.rowRibbons.delete(id);
+            }
+        }
     }
 
     private mountRibbon(): void {

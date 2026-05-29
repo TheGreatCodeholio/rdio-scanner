@@ -118,6 +118,8 @@ var SqliteSchema = []string{
     "audioFilename" text NOT NULL,
     "audioMime" text NOT NULL,
     "audioPath" text NOT NULL DEFAULT '',
+    "duration" integer NOT NULL DEFAULT 0,
+    "peaks" blob,
     "siteRef" integer NOT NULL DEFAULT 0,
     "systemId" integer NOT NULL,
     "talkgroupId" integer NOT NULL,

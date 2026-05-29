@@ -336,6 +336,17 @@ func (controller *Controller) IngestCall(call *Call) {
 		controller.Logs.LogEvent(LogLevelWarn, err.Error())
 	}
 
+	// Pre-compute duration + peak envelope from the (now-M4A) audio so
+	// the archive UI can render per-row duration and a mini waveform
+	// without any decode on the search path. Non-fatal: a failure here
+	// leaves both zeroed and the UI degrades gracefully.
+	if duration, peaks, mErr := computeAudioMetrics(call.Audio); mErr == nil {
+		call.Duration = duration
+		call.Peaks = peaks
+	} else {
+		controller.Logs.LogEvent(LogLevelWarn, "audio metrics: "+mErr.Error())
+	}
+
 	if id, err := controller.Calls.WriteCall(call, controller.Database); err == nil {
 		call.Id = id
 

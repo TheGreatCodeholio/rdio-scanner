@@ -74,6 +74,8 @@ type Call struct {
 	AudioMime     string
 	AudioPath     string
 	Delayed       bool
+	Duration      uint  // milliseconds; 0 if unknown (pre-migration row)
+	Peaks         []byte // 32 bucketed peak amplitudes (0–255); nil if unknown
 	Frequencies   []CallFrequency
 	Meta          CallMeta
 	Patches       []uint
@@ -717,18 +719,28 @@ func (calls *Calls) Search(searchOptions *CallsSearchOptions, client *Client) (*
 		return nil, formatError(err, query)
 	}
 
-	query = fmt.Sprintf(`SELECT c."callId", c."timestamp", s."systemRef", t."talkgroupRef" FROM "calls" AS c LEFT JOIN "systems" AS s ON s."systemId" = c."systemId" LEFT JOIN "talkgroups" AS t ON t."talkgroupId" = c."talkgroupId" LEFT JOIN "delayed" AS d ON d."callId" = c."callId" WHERE %s ORDER BY c."timestamp" %s LIMIT %d OFFSET %d`, where, order, limit, offset)
+	query = fmt.Sprintf(`SELECT c."callId", c."timestamp", c."duration", c."peaks", s."systemRef", t."talkgroupRef" FROM "calls" AS c LEFT JOIN "systems" AS s ON s."systemId" = c."systemId" LEFT JOIN "talkgroups" AS t ON t."talkgroupId" = c."talkgroupId" LEFT JOIN "delayed" AS d ON d."callId" = c."callId" WHERE %s ORDER BY c."timestamp" %s LIMIT %d OFFSET %d`, where, order, limit, offset)
 	if rows, err = db.Sql.Query(query); err != nil && err != sql.ErrNoRows {
 		return nil, formatError(err, query)
 	}
 
 	for rows.Next() {
 		searchResult := CallsSearchResult{}
-		if err = rows.Scan(&searchResult.Id, &timestamp, &searchResult.System, &searchResult.Talkgroup); err != nil {
+		var (
+			durationRow sql.NullInt64
+			peaksRow    []byte
+		)
+		if err = rows.Scan(&searchResult.Id, &timestamp, &durationRow, &peaksRow, &searchResult.System, &searchResult.Talkgroup); err != nil {
 			break
 		}
 
 		searchResult.Timestamp = time.UnixMilli(timestamp)
+		if durationRow.Valid {
+			searchResult.Duration = uint(durationRow.Int64)
+		}
+		if len(peaksRow) > 0 {
+			searchResult.Peaks = peaksRow
+		}
 
 		searchResults.Results = append(searchResults.Results, searchResult)
 	}
@@ -786,15 +798,23 @@ func (calls *Calls) WriteCall(call *Call, db *Database) (uint64, error) {
 	// AudioFilename/AudioMime arrive from untrusted multipart uploads
 	// (parsers.go), and previously landed in the query via '%s' with no
 	// escaping at all — a pre-auth SQLi vector.
-	if db.Config.DbType == DbTypePostgresql {
-		query = fmt.Sprintf(`INSERT INTO "calls" ("audio", "audioFilename", "audioMime", "audioPath", "siteRef", "systemId", "talkgroupId", "timestamp") VALUES ($1, $2, $3, $4, %d, %d, %d, %d) RETURNING "callId"`, call.SiteRef, call.System.Id, call.Talkgroup.Id, call.Timestamp.UnixMilli())
+	// Peaks may legitimately be nil if computeAudioMetrics failed; NULL
+	// is the right wire value for the column. The driver maps nil []byte
+	// to NULL on all three supported DBs.
+	var peaksParam any = call.Peaks
+	if len(call.Peaks) == 0 {
+		peaksParam = nil
+	}
 
-		err = tx.QueryRow(query, emptyAudio, call.AudioFilename, call.AudioMime, call.AudioPath).Scan(&call.Id)
+	if db.Config.DbType == DbTypePostgresql {
+		query = fmt.Sprintf(`INSERT INTO "calls" ("audio", "audioFilename", "audioMime", "audioPath", "duration", "peaks", "siteRef", "systemId", "talkgroupId", "timestamp") VALUES ($1, $2, $3, $4, %d, $5, %d, %d, %d, %d) RETURNING "callId"`, call.Duration, call.SiteRef, call.System.Id, call.Talkgroup.Id, call.Timestamp.UnixMilli())
+
+		err = tx.QueryRow(query, emptyAudio, call.AudioFilename, call.AudioMime, call.AudioPath, peaksParam).Scan(&call.Id)
 
 	} else {
-		query = fmt.Sprintf(`INSERT INTO "calls" ("audio", "audioFilename", "audioMime", "audioPath", "siteRef", "systemId", "talkgroupId", "timestamp") VALUES (?, ?, ?, ?, %d, %d, %d, %d)`, call.SiteRef, call.System.Id, call.Talkgroup.Id, call.Timestamp.UnixMilli())
+		query = fmt.Sprintf(`INSERT INTO "calls" ("audio", "audioFilename", "audioMime", "audioPath", "duration", "peaks", "siteRef", "systemId", "talkgroupId", "timestamp") VALUES (?, ?, ?, ?, %d, ?, %d, %d, %d, %d)`, call.Duration, call.SiteRef, call.System.Id, call.Talkgroup.Id, call.Timestamp.UnixMilli())
 
-		if res, err = tx.Exec(query, emptyAudio, call.AudioFilename, call.AudioMime, call.AudioPath); err == nil {
+		if res, err = tx.Exec(query, emptyAudio, call.AudioFilename, call.AudioMime, call.AudioPath, peaksParam); err == nil {
 			if id, err := res.LastInsertId(); err == nil {
 				call.Id = uint64(id)
 			}
@@ -943,6 +963,13 @@ type CallsSearchResult struct {
 	System    uint      `json:"system"`
 	Talkgroup uint      `json:"talkgroup"`
 	Timestamp time.Time `json:"dateTime"`
+	// Duration in milliseconds. 0 if the row predates the duration column
+	// migration; clients should fall back to "—:—" in that case.
+	Duration uint `json:"duration,omitempty"`
+	// Peaks are 32 amplitude bytes (0–255 = 0–full-scale). Empty slice
+	// when unknown (pre-migration row); clients then hide the mini
+	// waveform thumbnail rather than render a flat bar.
+	Peaks []byte `json:"peaks,omitempty"`
 }
 
 type CallsSearchResults struct {

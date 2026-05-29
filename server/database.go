@@ -163,6 +163,10 @@ func (db *Database) migrate() error {
 		return formatError(err, "")
 	}
 
+	if err := migrateCallsDurationPeaks(db); err != nil {
+		return formatError(err, "")
+	}
+
 	if err := migrateApikeys(db); err != nil {
 		return formatError(err, "")
 	}
