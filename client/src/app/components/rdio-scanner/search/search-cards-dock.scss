@@ -27,6 +27,7 @@ $accent: rgb(0, 230, 118);
   padding: 8px 12px;
 }
 .results-count { color: rgb(180, 180, 180); font-size: 12px; }
+.results-context { color: rgb(120, 120, 120); margin-left: 4px; }
 .results-loading { color: $accent; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
 .results-spacer { flex: 1; }
 .sidebar-toggle { display: none; }
@@ -174,7 +175,7 @@ $accent: rgb(0, 230, 118);
   gap: 12px;
   grid-column: 1 / 3;
   grid-row: 2;
-  grid-template-columns: 40px 200px 1fr auto auto auto;
+  grid-template-columns: 40px 200px 1fr auto auto auto auto;
   padding: 14px 16px;
 }
 .dock-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -257,4 +258,5 @@ $accent: rgb(0, 230, 118);
   .dock-seek { grid-column: 1 / 4; grid-row: 2; }
   .dock-timecode { display: none; }
   .dock-autoplay .dock-autoplay-label { display: none; }
+  .dock-permalink { display: none; }
 }

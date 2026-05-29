@@ -24,6 +24,7 @@ import { timer } from 'rxjs';
 import { RdioScannerEvent, RdioScannerLivefeedMode } from './rdio-scanner';
 import { RdioScannerService } from './rdio-scanner.service';
 import { RdioScannerNativeComponent } from './native/native.component';
+import { RdioScannerSearchComponent } from './search/search.component';
 
 @Component({
     selector: 'rdio-scanner',
@@ -40,11 +41,34 @@ export class RdioScannerComponent implements OnDestroy, OnInit {
 
     @ViewChild('selectPanel') private selectPanel: MatSidenav | undefined;
 
+    @ViewChild('searchComponent') private searchComponent: RdioScannerSearchComponent | undefined;
+
+    /** Holds a `?call=<id>` deep-link target between page load and the
+     *  first post-auth `config` event. Restricted instances will not
+     *  emit `config` until the user submits a valid PIN, so this is
+     *  naturally gated behind the same auth wall as everything else —
+     *  no separate authorization check needed here. */
+    private pendingDeepLinkCallId: number | undefined;
+
     constructor(
         private matSnackBar: MatSnackBar,
         private ngElementRef: ElementRef,
         private rdioScannerService: RdioScannerService,
     ) {
+        // Parse the deep-link id eagerly (constructor is the earliest
+        // point at which window is reliable). Holding it in memory until
+        // `config` arrives means any websocket re-handshake or PIN retry
+        // re-triggers the same code path automatically.
+        try {
+            const url = new URL(window.location.href);
+            const raw = url.searchParams.get('call');
+            if (raw && /^\d+$/.test(raw)) {
+                this.pendingDeepLinkCallId = parseInt(raw, 10);
+            }
+        } catch {
+            // URL parsing failed — nothing to consume.
+        }
+
         this.eventSubscription = this.rdioScannerService.event.subscribe((event: RdioScannerEvent) => this.eventHandler(event));
     }
 
@@ -142,6 +166,31 @@ export class RdioScannerComponent implements OnDestroy, OnInit {
     private eventHandler(event: RdioScannerEvent): void {
         if (event.livefeedMode) {
             this.livefeedMode = event.livefeedMode;
+        }
+
+        // The server only emits Config after successful PIN auth on
+        // restricted instances (and immediately on unrestricted ones),
+        // so consuming the deep-link here transparently enforces the
+        // access-code gate.
+        if ('config' in event && this.pendingDeepLinkCallId !== undefined) {
+            const id = this.pendingDeepLinkCallId;
+            this.pendingDeepLinkCallId = undefined;
+            this.consumeDeepLink(id);
+        }
+    }
+
+    private consumeDeepLink(callId: number): void {
+        // Open the search panel so the user can see the loaded call in
+        // context. Even if the call isn't on page 1 of the result list,
+        // the dock player at the bottom reflects it immediately.
+        this.searchPanel?.open();
+        this.searchComponent?.searchCalls();
+        this.rdioScannerService.loadAndPlay(callId);
+
+        // Strip ?call=… so a refresh doesn't re-trigger and the URL
+        // settles to the canonical app path. Keeps existing hash.
+        if (window.history && typeof window.history.replaceState === 'function') {
+            window.history.replaceState({}, '', window.location.pathname + window.location.hash);
         }
     }
 }

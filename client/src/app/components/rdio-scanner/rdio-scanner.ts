@@ -178,10 +178,15 @@ export interface RdioScannerPlaybackList {
 }
 
 export interface RdioScannerSearchOptions {
+    // Legacy single-date filter — kept for compatibility. New code should
+    // use dateStart/dateEnd for a real range.
     date?: Date;
+    dateStart?: Date;
+    dateEnd?: Date;
     group?: string;
     limit: number;
     offset: number;
+    query?: string;
     sort: number;
     system?: number;
     tag?: string;

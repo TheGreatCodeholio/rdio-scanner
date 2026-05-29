@@ -117,6 +117,27 @@ $accent: rgb(0, 230, 118);
   z-index: 4;
 }
 
+.date-header {
+  align-items: baseline;
+  color: rgb(170, 170, 170);
+  display: flex;
+  gap: 12px;
+  letter-spacing: 1.5px;
+  margin: 14px 4px 6px;
+  text-transform: uppercase;
+}
+.date-header:first-child { margin-top: 4px; }
+.date-header .date-label {
+  color: $accent;
+  font-size: 11px;
+  font-weight: 600;
+  text-shadow: 0 0 4px rgba(0, 230, 118, 0.25);
+}
+.date-header .date-count {
+  color: rgb(120, 120, 120);
+  font-size: 10px;
+}
+
 /* Mobile breakpoint — sidebar collapses to slide-in */
 @media (max-width: 720px) {
   .search-layout {

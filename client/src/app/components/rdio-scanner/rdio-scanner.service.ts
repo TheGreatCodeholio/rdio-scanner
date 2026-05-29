@@ -633,16 +633,16 @@ export class RdioScannerService implements OnDestroy {
         this.event.emit({ time: target });
     }
 
-    // computePeaks reduces a decoded AudioBuffer to a small array of peak
-    // amplitudes for the scrub-bar waveform. Channel 0 only (mono read of
-    // whatever the source provides), bucketed into ~buckets equal-width
-    // slices, each slice's max |sample| in [0, 1]. Returns a plain number[]
-    // so it survives JSON-ish event propagation and Angular change detection.
+    // computePeaks reduces a decoded AudioBuffer to a peak-amplitude array
+    // for the scrub-bar waveform. Channel 0 only, bucketed into `buckets`
+    // equal-width slices, each slice's max |sample| in [0, 1]. Returns a
+    // plain number[] so it survives event propagation + change detection.
     //
-    // Default bucket count chosen so bars render around a 60/40 fill ratio
-    // on typical scrub widths (~250–350 px), matching wavesurfer-style
-    // proportions without looking dense on mobile.
-    private computePeaks(buffer: AudioBuffer, buckets = 64): number[] {
+    // The default is sized for the search dock's high-res canvas ribbon
+    // renderer (one peak per output pixel on most desktop widths). The
+    // main-view drawer down-samples to its own bar count (~64) before
+    // render so its SVG bar layout doesn't change.
+    private computePeaks(buffer: AudioBuffer, buckets = 1024): number[] {
         const data = buffer.getChannelData(0);
         const step = Math.max(1, Math.floor(data.length / buckets));
         const out = new Array<number>(buckets);

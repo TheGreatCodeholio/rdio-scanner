@@ -23,7 +23,7 @@
         <h3>Search</h3>
         <div class="field">
           <input type="search" placeholder="Talkgroup, unit, frequency…"
-            formControlName="query" (input)="formChangeHandler()">
+            formControlName="query">
         </div>
 
         <h3>Filters</h3>
@@ -69,10 +69,16 @@
             (change)="formChangeHandler()">
         </div>
         <div class="field">
-          <label>Date</label>
-          <input type="datetime-local" formControlName="date"
+          <label>From</label>
+          <input type="datetime-local" formControlName="dateStart"
             [max]="playbackList?.dateStop" [min]="playbackList?.dateStart"
-            (change)="formChangeHandler()">
+            (change)="onDateChange()">
+        </div>
+        <div class="field">
+          <label>To</label>
+          <input type="datetime-local" formControlName="dateEnd"
+            [max]="playbackList?.dateStop" [min]="playbackList?.dateStart"
+            (change)="onDateChange()">
         </div>
         <div class="field">
           <label>Sort</label>
@@ -102,6 +108,9 @@
       <span class="results-count">
         @if (playbackList) {
           {{ playbackList.count }} result{{ playbackList.count === 1 ? '' : 's' }}
+          @if (contextSystemLabel(); as sysLabel) {
+            <span class="results-context">· {{ sysLabel }}</span>
+          }
         } @else {
           Loading…
         }
@@ -132,20 +141,25 @@
     </div>
 
     <div class="results-scroll" #scrollableResults>
-      @if (results | async; as rows) {
-        @for (row of rows; track row?.id; let i = $index) {
-          @if (row) {
+      @if (displayItems | async; as items) {
+        @for (item of items; track item.key) {
+          @if (item.kind === 'header') {
+            <div class="date-header">
+              <span class="date-label">{{ item.label }}</span>
+              <span class="date-count">{{ item.count }} on page</span>
+            </div>
+          } @else if (item.call) {
             <div class="result-card"
-              [class.playing]="row.id === call?.id"
-              (click)="play(+row.id)">
+              [class.playing]="item.call.id === call?.id"
+              (click)="play(+item.call.id)">
               <button type="button" class="btn-play"
-                (click)="$event.stopPropagation(); rowAction(row)"
-                [attr.aria-label]="rowActionLabel(row)">
-                @if (row.id === callPending) {
+                (click)="$event.stopPropagation(); rowAction(item.call)"
+                [attr.aria-label]="rowActionLabel(item.call)">
+                @if (item.call.id === callPending) {
                   <mat-icon class="spin">cached</mat-icon>
-                } @else if (row.id === call?.id && !paused) {
+                } @else if (item.call.id === call?.id && !paused) {
                   <mat-icon>pause</mat-icon>
-                } @else if (row.id === call?.id && paused) {
+                } @else if (item.call.id === call?.id && paused) {
                   <mat-icon>play_arrow</mat-icon>
                 } @else {
                   <mat-icon>play_arrow</mat-icon>
@@ -154,25 +168,24 @@
               <div class="meta">
                 <div class="row1">
                   <span class="tg">
-                    {{ row.talkgroupData?.label || row.talkgroup }}
+                    {{ item.call.talkgroupData?.label || item.call.talkgroup }}
                   </span>
-                  @if (row.talkgroupData?.tag) {
-                    <span class="tg-tag">{{ row.talkgroupData?.tag }}</span>
+                  @if (item.call.talkgroupData?.tag) {
+                    <span class="tg-tag">{{ item.call.talkgroupData?.tag }}</span>
                   }
                 </div>
                 <div class="row2">
                   <span class="time">
-                    {{ row.dateTime | date:'MM/dd' }} ·
-                    {{ row.dateTime | date: time12h ? 'h:mm:ss a' : 'HH:mm:ss' }}
+                    {{ item.call.dateTime | date: time12h ? 'h:mm:ss a' : 'HH:mm:ss' }}
                   </span>
-                  <span class="sys">{{ row.systemData?.label || row.system }}</span>
-                  @if (row.talkgroupData?.name && row.talkgroupData?.name !== row.talkgroupData?.label) {
-                    <span class="tg-name">{{ row.talkgroupData?.name }}</span>
+                  <span class="sys">{{ item.call.systemData?.label || item.call.system }}</span>
+                  @if (item.call.talkgroupData?.name && item.call.talkgroupData?.name !== item.call.talkgroupData?.label) {
+                    <span class="tg-name">{{ item.call.talkgroupData?.name }}</span>
                   }
                 </div>
               </div>
               <button type="button" class="icon-btn subtle dl"
-                (click)="$event.stopPropagation(); download(+row.id)"
+                (click)="$event.stopPropagation(); download(+item.call.id)"
                 aria-label="Download">
                 <mat-icon>save_alt</mat-icon>
               </button>
@@ -181,7 +194,7 @@
             <div class="result-card skeleton"></div>
           }
         }
-        @if (!rows.length && !resultsPending) {
+        @if (!items.length && !resultsPending) {
           <div class="empty-state">No calls match the current filters.</div>
         }
       }
@@ -228,6 +241,11 @@
     <button type="button" class="icon-btn subtle"
       [disabled]="!call" (click)="downloadCurrent()" aria-label="Download current">
       <mat-icon>save_alt</mat-icon>
+    </button>
+
+    <button type="button" class="icon-btn subtle dock-permalink"
+      [disabled]="!call" (click)="copyPermalink()" aria-label="Copy permalink">
+      <mat-icon>link</mat-icon>
     </button>
 
     <div class="dock-autoplay" [class.on]="livefeedPlayback"
