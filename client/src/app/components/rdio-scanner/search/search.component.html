@@ -1,181 +1,240 @@
-<mat-card appearance="outlined" class="rdio-list">
-  <mat-table [dataSource]="results">
-    <ng-container matColumnDef="control">
-      <mat-header-cell *matHeaderCellDef></mat-header-cell>
-      <mat-cell *matCellDef="let row">
-        @if (downloadMode.checked && row) {
-          <button mat-icon-button (click)="download(+row.id)">
-            <mat-icon>save_alt</mat-icon>
-          </button>
-        }
-        @if (row && !downloadMode.checked && !paused && row?.id != call?.id && row?.id != callPending) {
-          <button
-            mat-icon-button (click)="play(+row.id)">
-            <mat-icon>play_arrow</mat-icon>
-          </button>
-        }
-        @if (row && !downloadMode.checked && row?.id == callPending) {
-          <button mat-icon-button>
-            <mat-icon class="spin">cached</mat-icon>
-          </button>
-        }
-        @if (row && !downloadMode.checked && row?.id == call?.id) {
-          <button mat-icon-button (click)="stop()">
-            <mat-icon>stop</mat-icon>
-          </button>
-        }
-      </mat-cell>
-    </ng-container>
-    <ng-container matColumnDef="date">
-      <mat-header-cell *matHeaderCellDef>
-        <span>Date</span>
-      </mat-header-cell>
-      <mat-cell *matCellDef="let row">
-        <span>{{ row?.dateTime | date:'MM/dd' }}</span>
-      </mat-cell>
-    </ng-container>
-    <ng-container matColumnDef="time">
-      <mat-header-cell *matHeaderCellDef [ngClass]="{'time12h': time12h}">
-        <span>Time</span>
-      </mat-header-cell>
-      <mat-cell *matCellDef="let row" [ngClass]="{'time12h': time12h}">
-        <span>{{ row?.dateTime | date: time12h ? 'h:mm a' : 'HH:mm' }}</span>
-      </mat-cell>
-    </ng-container>
-    <ng-container matColumnDef="system">
-      <mat-header-cell *matHeaderCellDef>
-        <span>System</span>
-      </mat-header-cell>
-      <mat-cell *matCellDef="let row">
-        <span>{{ row?.systemData?.label || row?.system }}</span>
-      </mat-cell>
-    </ng-container>
-    <ng-container matColumnDef="alpha">
-      <mat-header-cell *matHeaderCellDef>
-        <span>Talkgroup</span>
-      </mat-header-cell>
-      <mat-cell *matCellDef="let row">
-        <span>{{ row?.talkgroupData?.label || row?.talkgroup }}</span>
-      </mat-cell>
-    </ng-container>
-    <ng-container matColumnDef="name">
-      <mat-header-cell *matHeaderCellDef>
-        <span>Name</span>
-      </mat-header-cell>
-      <mat-cell *matCellDef="let row">
-        <span>{{ row?.talkgroupData?.name }}</span>
-      </mat-cell>
-    </ng-container>
-    <mat-header-row *matHeaderRowDef="['control', 'date', 'time', 'system', 'alpha', 'name']">
-    </mat-header-row>
-    <mat-row *matRowDef="let row; columns: ['control', 'date', 'time', 'system', 'alpha', 'name']">
-    </mat-row>
-  </mat-table>
-  <mat-progress-bar color="primary" [mode]="resultsPending ? 'query' : 'determinate'">
-  </mat-progress-bar>
-  <div class="paginator">
-    <mat-slide-toggle #downloadMode color="primary" labelPosition="before">
-      <mat-icon>save_alt</mat-icon>
-    </mat-slide-toggle>
-    <mat-paginator [disabled]="livefeedPlayback || resultsPending" [length]="playbackList?.count"
-      [hidePageSize]="true" [pageSize]="results.value.length" [showFirstLastButtons]="true"
-      (page)="refreshResults()">
-    </mat-paginator>
-  </div>
-</mat-card>
-<mat-card appearance="outlined" class="rdio-filters">
-  <form autocomplete="off" [formGroup]="form">
-    <mat-form-field>
-      <mat-label>
-        Sort order
-      </mat-label>
-      <mat-select formControlName="sort" (selectionChange)="formChangeHandler()">
-        <mat-option [value]="1">
-          Ascending
-        </mat-option>
-        <mat-option [value]="-1">
-          Descending
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>
-        Date
-      </mat-label>
-      <input matInput type="datetime-local" formControlName="date" [max]="playbackList?.dateStop"
-        [min]="playbackList?.dateStart" placeholder="Choose a date" (change)="formChangeHandler()">
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>
-        System
-      </mat-label>
-      <mat-select formControlName="system" (selectionChange)="formChangeHandler()">
-        <mat-option [value]="-1">
-          All Systems
-        </mat-option>
-        @for (system of optionsSystem; track system; let i = $index) {
-          <mat-option [value]="i">
-            {{ system }}
-          </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>
-        Talkgroup
-      </mat-label>
-      <mat-select formControlName="talkgroup" (selectionChange)="formChangeHandler()">
-        <mat-option [value]="-1">
-          All Talkgroups
-        </mat-option>
-        @for (talkgroup of optionsTalkgroup; track talkgroup; let i = $index) {
-          <mat-option [value]="i">
-            {{ talkgroup }}
-          </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>
-        Group
-      </mat-label>
-      <mat-select formControlName="group" (selectionChange)="formChangeHandler()">
-        <mat-option [value]="-1">
-          All Groups
-        </mat-option>
-        @for (group of optionsGroup; track group; let i = $index) {
-          <mat-option [value]="i">
-            {{ group }}
-          </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>
-        Tag
-      </mat-label>
-      <mat-select formControlName="tag" (selectionChange)="formChangeHandler()">
-        <mat-option [value]="-1">
-          All Tags
-        </mat-option>
-        @for (tag of optionsTag; track tag; let i = $index) {
-          <mat-option [value]="i">
-            {{ tag }}
-          </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field>
-      <mat-label>
-        Unit
-      </mat-label>
-      <input type="number" matInput>
-      <mat-icon matSuffix>search</mat-icon>
-    </mat-form-field>
-    <div class="reset">
-      <button mat-raised-button type="button" [disabled]="resultsPending" (click)="resetForm()">
-        Reset
-      </button>
+<div class="search-layout" [class.sidebar-open]="sidebarOpen">
+
+  <!-- Sidebar: quick presets + search + filters -->
+  <aside class="search-sidebar" [class.open]="sidebarOpen">
+    <div class="sidebar-scroll">
+      <h3>Quick presets</h3>
+      <div class="preset-row">
+        <button type="button" class="chip-quick"
+          [class.active]="activePreset === 'hour'"
+          (click)="applyPreset('hour')">Last hr</button>
+        <button type="button" class="chip-quick"
+          [class.active]="activePreset === 'today'"
+          (click)="applyPreset('today')">Today</button>
+        <button type="button" class="chip-quick"
+          [class.active]="activePreset === 'day'"
+          (click)="applyPreset('day')">24 h</button>
+        <button type="button" class="chip-quick"
+          [class.active]="activePreset === 'week'"
+          (click)="applyPreset('week')">Week</button>
+      </div>
+
+      <form autocomplete="off" [formGroup]="form">
+        <h3>Search</h3>
+        <div class="field">
+          <input type="search" placeholder="Talkgroup, unit, frequency…"
+            formControlName="query" (input)="formChangeHandler()">
+        </div>
+
+        <h3>Filters</h3>
+        <div class="field">
+          <label>System</label>
+          <select formControlName="system" (change)="formChangeHandler()">
+            <option [ngValue]="-1">All systems</option>
+            @for (system of optionsSystem; track system; let i = $index) {
+              <option [ngValue]="i">{{ system }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Talkgroup</label>
+          <select formControlName="talkgroup" (change)="formChangeHandler()">
+            <option [ngValue]="-1">All</option>
+            @for (talkgroup of optionsTalkgroup; track talkgroup; let i = $index) {
+              <option [ngValue]="i">{{ talkgroup }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Group</label>
+          <select formControlName="group" (change)="formChangeHandler()">
+            <option [ngValue]="-1">All</option>
+            @for (group of optionsGroup; track group; let i = $index) {
+              <option [ngValue]="i">{{ group }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Tag</label>
+          <select formControlName="tag" (change)="formChangeHandler()">
+            <option [ngValue]="-1">All</option>
+            @for (tag of optionsTag; track tag; let i = $index) {
+              <option [ngValue]="i">{{ tag }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <input type="number" formControlName="unit" placeholder="e.g. 1234"
+            (change)="formChangeHandler()">
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="datetime-local" formControlName="date"
+            [max]="playbackList?.dateStop" [min]="playbackList?.dateStart"
+            (change)="formChangeHandler()">
+        </div>
+        <div class="field">
+          <label>Sort</label>
+          <select formControlName="sort" (change)="formChangeHandler()">
+            <option [ngValue]="-1">Newest first</option>
+            <option [ngValue]="1">Oldest first</option>
+          </select>
+        </div>
+      </form>
+
+      <button type="button" class="rdio-button-real reset-btn"
+        [disabled]="resultsPending" (click)="resetForm()">Reset filters</button>
     </div>
-  </form>
-</mat-card>
+  </aside>
+
+  <!-- Mobile sidebar overlay -->
+  <div class="sidebar-scrim" [class.visible]="sidebarOpen"
+    (click)="sidebarOpen = false"></div>
+
+  <!-- Main results area -->
+  <main class="search-main">
+    <div class="results-header">
+      <button type="button" class="sidebar-toggle icon-btn"
+        (click)="sidebarOpen = !sidebarOpen" aria-label="Toggle filters">
+        <mat-icon>tune</mat-icon>
+      </button>
+      <span class="results-count">
+        @if (playbackList) {
+          {{ playbackList.count }} result{{ playbackList.count === 1 ? '' : 's' }}
+        } @else {
+          Loading…
+        }
+      </span>
+      @if (resultsPending) {
+        <span class="results-loading">Searching…</span>
+      }
+      <span class="results-spacer"></span>
+      <div class="paginator-mini">
+        <button type="button" class="icon-btn subtle edge"
+          [disabled]="!canPrevPage()" (click)="firstPage()" aria-label="First page">
+          <mat-icon>first_page</mat-icon>
+        </button>
+        <button type="button" class="icon-btn subtle"
+          [disabled]="!canPrevPage()" (click)="prevPage()" aria-label="Previous page">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <span class="page-indicator">{{ pageIndicator() }}</span>
+        <button type="button" class="icon-btn subtle"
+          [disabled]="!canNextPage()" (click)="nextPage()" aria-label="Next page">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+        <button type="button" class="icon-btn subtle edge"
+          [disabled]="!canNextPage()" (click)="lastPage()" aria-label="Last page">
+          <mat-icon>last_page</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <div class="results-scroll" #scrollableResults>
+      @if (results | async; as rows) {
+        @for (row of rows; track row?.id; let i = $index) {
+          @if (row) {
+            <div class="result-card"
+              [class.playing]="row.id === call?.id"
+              (click)="play(+row.id)">
+              <button type="button" class="btn-play"
+                (click)="$event.stopPropagation(); rowAction(row)"
+                [attr.aria-label]="rowActionLabel(row)">
+                @if (row.id === callPending) {
+                  <mat-icon class="spin">cached</mat-icon>
+                } @else if (row.id === call?.id && !paused) {
+                  <mat-icon>pause</mat-icon>
+                } @else if (row.id === call?.id && paused) {
+                  <mat-icon>play_arrow</mat-icon>
+                } @else {
+                  <mat-icon>play_arrow</mat-icon>
+                }
+              </button>
+              <div class="meta">
+                <div class="row1">
+                  <span class="tg">
+                    {{ row.talkgroupData?.label || row.talkgroup }}
+                  </span>
+                  @if (row.talkgroupData?.tag) {
+                    <span class="tg-tag">{{ row.talkgroupData?.tag }}</span>
+                  }
+                </div>
+                <div class="row2">
+                  <span class="time">
+                    {{ row.dateTime | date:'MM/dd' }} ·
+                    {{ row.dateTime | date: time12h ? 'h:mm:ss a' : 'HH:mm:ss' }}
+                  </span>
+                  <span class="sys">{{ row.systemData?.label || row.system }}</span>
+                  @if (row.talkgroupData?.name && row.talkgroupData?.name !== row.talkgroupData?.label) {
+                    <span class="tg-name">{{ row.talkgroupData?.name }}</span>
+                  }
+                </div>
+              </div>
+              <button type="button" class="icon-btn subtle dl"
+                (click)="$event.stopPropagation(); download(+row.id)"
+                aria-label="Download">
+                <mat-icon>save_alt</mat-icon>
+              </button>
+            </div>
+          } @else {
+            <div class="result-card skeleton"></div>
+          }
+        }
+        @if (!rows.length && !resultsPending) {
+          <div class="empty-state">No calls match the current filters.</div>
+        }
+      }
+    </div>
+  </main>
+
+  <!-- Bottom dock player -->
+  <footer class="search-dock" [class.has-call]="!!call">
+    <button type="button" class="btn-play dock-play"
+      (click)="togglePlayback()"
+      [attr.aria-label]="paused ? 'Resume' : 'Pause'">
+      @if (paused || !call) {
+        <mat-icon>play_arrow</mat-icon>
+      } @else {
+        <mat-icon>pause</mat-icon>
+      }
+    </button>
+
+    <div class="dock-meta">
+      <span class="dock-tg">
+        {{ call?.talkgroupData?.label || call?.talkgroup || 'No call playing' }}
+      </span>
+      <span class="dock-sub">
+        @if (call) {
+          {{ call.dateTime | date:'MM/dd' }} ·
+          {{ call.dateTime | date: time12h ? 'h:mm:ss a' : 'HH:mm:ss' }} ·
+          {{ call.systemData?.label || call.system }}
+        } @else {
+          Select a result to begin playback
+        }
+      </span>
+    </div>
+
+    <div class="dock-seek">
+      <canvas #dockCanvas class="dock-wave" aria-label="Playback waveform"></canvas>
+    </div>
+
+    <div class="dock-timecode lcd" [class.idle]="!isPlaying">
+      <span class="dock-timecode-text">
+        {{ formatTime(dockTime) }} / {{ formatTime(dockDuration) }}
+      </span>
+    </div>
+
+    <button type="button" class="icon-btn subtle"
+      [disabled]="!call" (click)="downloadCurrent()" aria-label="Download current">
+      <mat-icon>save_alt</mat-icon>
+    </button>
+
+    <div class="dock-autoplay" [class.on]="livefeedPlayback"
+      (click)="toggleAutoplay()" role="checkbox"
+      [attr.aria-checked]="livefeedPlayback" tabindex="0">
+      <span class="dock-led"></span>
+      <span class="dock-autoplay-label">Auto</span>
+    </div>
+  </footer>
+</div>
