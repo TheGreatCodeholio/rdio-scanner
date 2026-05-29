@@ -51,6 +51,39 @@ func migrateCallsAudioPath(db *Database) error {
 	return nil
 }
 
+// migrateCallsDurationPeaks adds the per-call duration (ms) and peak-
+// envelope columns used by the archive UI's card rows and mini waveform.
+// Old rows get duration=0 and peaks=NULL; the UI degrades gracefully
+// (shows a dash for duration, hides the waveform) until a future backfill
+// task fills them in.
+func migrateCallsDurationPeaks(db *Database) error {
+	formatError := errorFormatter("migration", "migrateCallsDurationPeaks")
+
+	if _, err := db.Sql.Exec(`SELECT "duration" FROM "calls" LIMIT 1`); err == nil {
+		return nil
+	}
+
+	log.Println("adding calls.duration and calls.peaks columns...")
+
+	// duration: integer ms; peaks: per-DB blob type
+	blobType := "blob"
+	if db.Config.DbType == DbTypePostgresql {
+		blobType = "bytea"
+	}
+
+	stmts := []string{
+		`ALTER TABLE "calls" ADD COLUMN "duration" integer NOT NULL DEFAULT 0`,
+		fmt.Sprintf(`ALTER TABLE "calls" ADD COLUMN "peaks" %s`, blobType),
+	}
+	for _, q := range stmts {
+		if _, err := db.Sql.Exec(q); err != nil {
+			return formatError(err, q)
+		}
+	}
+
+	return nil
+}
+
 func migrateAccesses(db *Database) error {
 	var (
 		err   error

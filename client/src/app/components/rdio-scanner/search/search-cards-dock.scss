@@ -31,20 +31,6 @@ $accent: rgb(0, 230, 118);
 .results-loading { color: $accent; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
 .results-spacer { flex: 1; }
 .sidebar-toggle { display: none; }
-.paginator-mini {
-  align-items: center;
-  display: flex;
-  font-size: 11px;
-  gap: 4px;
-}
-.page-indicator {
-  color: rgb(180, 180, 180);
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  min-width: 160px;
-  text-align: center;
-  white-space: nowrap;
-}
 
 .results-scroll {
   flex: 1;
@@ -67,7 +53,7 @@ $accent: rgb(0, 230, 118);
   cursor: pointer;
   display: grid;
   gap: 10px;
-  grid-template-columns: 38px 1fr auto;
+  grid-template-columns: 38px 1fr 140px 48px auto;
   margin-bottom: 8px;
   padding: 10px 12px;
   transition: border-color 100ms;
@@ -81,6 +67,18 @@ $accent: rgb(0, 230, 118);
     cursor: default;
     height: 60px;
   }
+}
+.result-card .wave-mini { height: 24px; min-width: 0; }
+.result-card .wave-mini canvas { display: block; height: 24px; width: 100%; }
+.result-card .dur {
+  color: rgb(170, 170, 170);
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  text-align: right;
+}
+@media (max-width: 640px) {
+  .result-card { grid-template-columns: 38px 1fr 60px auto; }
+  .result-card .wave-mini { display: none; }
 }
 .result-card .meta { min-width: 0; }
 .result-card .row1 {
@@ -210,8 +208,8 @@ $accent: rgb(0, 230, 118);
   .search-main { grid-column: 1; grid-row: 1 / 2; }
   .search-dock { grid-column: 1; grid-row: 2; }
   .sidebar-toggle { display: inline-flex; }
-  .paginator-mini .edge { display: none; }
-  .page-indicator { min-width: auto; }
+  .results-paginator .edge { display: none; }
+  .pg-readout { min-width: auto; }
   .search-dock {
     gap: 8px;
     grid-template-columns: 40px 1fr auto;

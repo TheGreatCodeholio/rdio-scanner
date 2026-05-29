@@ -47,11 +47,19 @@ export interface RdioScannerCall {
     audioType?: string;
     dateTime: Date;
     delayed: boolean;
+    /** Total clip length in milliseconds. 0 when unknown (pre-migration
+     *  row that was never re-processed). The archive UI degrades to a
+     *  dash placeholder in that case. */
+    duration?: number;
     frequencies?: RdioScannerCallFrequency[];
     frequency?: number;
     groupsData?: RdioScannerGroupData[];
     id: number;
     patches: number[];
+    /** Decoded mini-waveform peaks (0..1 amplitude per bucket, ~32
+     *  buckets). Set from the server-supplied base64 byte array in the
+     *  ListCall response by RdioScannerService. */
+    peaks?: number[];
     source?: number;
     sources?: RdioScannerCallSource[];
     system: number;

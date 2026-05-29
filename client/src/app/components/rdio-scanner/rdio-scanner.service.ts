@@ -444,6 +444,16 @@ export class RdioScannerService implements OnDestroy {
             this.skipDelay = undefined;
         }
 
+        // Clicking play on a specific call is an explicit user intent
+        // that should override any earlier pause. Without this, both
+        // queue() and play() would short-circuit on livefeedPaused and
+        // the newly-fetched call would silently sit in the queue.
+        if (this.livefeedPaused) {
+            this.livefeedPaused = false;
+            this.audioContext?.resume();
+            this.event.emit({ pause: false });
+        }
+
         this.playbackPending = id;
 
         this.stop();
@@ -658,6 +668,24 @@ export class RdioScannerService implements OnDestroy {
             out[i] = peak > 1 ? 1 : peak;
         }
         return out;
+    }
+
+    /** Decode the per-row mini-waveform peaks the server ships in search
+     *  results. Wire format: base64-encoded raw byte array (Go's default
+     *  JSON encoding for []byte) where each byte is 0–255 = 0..1
+     *  amplitude. Returns an empty array on any decode error so the UI
+     *  hides the thumbnail rather than choking. */
+    private decodePeaksBase64(b64: string): number[] {
+        try {
+            const bin = atob(b64);
+            const out = new Array<number>(bin.length);
+            for (let i = 0; i < bin.length; i++) {
+                out[i] = bin.charCodeAt(i) / 255;
+            }
+            return out;
+        } catch {
+            return [];
+        }
     }
 
     // onSourceEnded is the natural-end callback for the playing source.
@@ -1225,7 +1253,17 @@ export class RdioScannerService implements OnDestroy {
                     this.playbackList = message[1];
 
                     if (this.playbackList) {
-                        this.playbackList.results = this.playbackList.results.map((call) => this.transformCall(call));
+                        this.playbackList.results = this.playbackList.results.map((call) => {
+                            // Server ships `peaks` as a JSON base64 string
+                            // (Go marshals []byte that way). Decode to a
+                            // normalised float array so the search component
+                            // can pass it straight to WaveformRibbon.
+                            const raw = (call as unknown as { peaks?: unknown }).peaks;
+                            if (typeof raw === 'string' && raw.length > 0) {
+                                call.peaks = this.decodePeaksBase64(raw);
+                            }
+                            return this.transformCall(call);
+                        });
 
                         this.event.emit({ playbackList: this.playbackList });
 
