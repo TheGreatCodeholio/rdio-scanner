@@ -222,13 +222,6 @@ export class RdioScannerMainComponent implements OnDestroy, OnInit {
         return `${m}:${pad(s, 2)}.${pad(ms, 3)}`;
     }
 
-    // True when audio is actively playing — drives the .idle class on
-    // the drawer time chip so it lights up cyan during playback and
-    // dims to the LCD's idle tone otherwise. Matches the existing LCD
-    // pattern (.rdio-display.idle → muted background).
-    get isPlaying(): boolean {
-        return !!this.call && !this.livefeedPaused;
-    }
 
     onScrub(ev: Event): void {
         const v = parseFloat((ev.target as HTMLInputElement).value);
