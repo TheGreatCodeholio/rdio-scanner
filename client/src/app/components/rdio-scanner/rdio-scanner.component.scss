@@ -38,6 +38,17 @@ $background-color: rgb(30, 30, 30);
     justify-content: flex-end;
   }
 
+  // Search panel needs its wrapper to fill the viewport height so its
+  // internal grid (sidebar + main + dock) can size correctly. The select
+  // panel keeps the default content-driven flow.
+  &.search > div {
+    overflow: hidden;
+  }
+  &.search > div > div {
+    height: 100%;
+    max-width: none;
+  }
+
   > div {
     flex: 1;
     height: 100%;
