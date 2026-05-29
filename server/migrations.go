@@ -56,10 +56,17 @@ func migrateCallsAudioPath(db *Database) error {
 // Old rows get duration=0 and peaks=NULL; the UI degrades gracefully
 // (shows a dash for duration, hides the waveform) until a future backfill
 // task fills them in.
+//
+// Probe uses the **unquoted** column name on purpose. SQLite's legacy
+// double-quoted-identifier fallback (a misspelled "name" is silently
+// treated as a string literal) makes `SELECT "duration" FROM "calls"`
+// return the string "duration" for every row — i.e. never errors, even
+// when the column is missing. Without the quotes the parser treats the
+// token as an identifier and raises "no such column" as expected.
 func migrateCallsDurationPeaks(db *Database) error {
 	formatError := errorFormatter("migration", "migrateCallsDurationPeaks")
 
-	if _, err := db.Sql.Exec(`SELECT "duration" FROM "calls" LIMIT 1`); err == nil {
+	if _, err := db.Sql.Exec(`SELECT duration FROM "calls" LIMIT 1`); err == nil {
 		return nil
 	}
 
@@ -77,6 +84,11 @@ func migrateCallsDurationPeaks(db *Database) error {
 	}
 	for _, q := range stmts {
 		if _, err := db.Sql.Exec(q); err != nil {
+			// Tolerate "duplicate column" on re-runs (e.g. partial prior
+			// migration) so we stay idempotent.
+			if msg := strings.ToLower(err.Error()); strings.Contains(msg, "duplicate column") || strings.Contains(msg, "already exists") {
+				continue
+			}
 			return formatError(err, q)
 		}
 	}
