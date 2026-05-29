@@ -42,11 +42,11 @@ $accent: rgb(0, 230, 118);
 .sidebar-scroll::-webkit-scrollbar-thumb { background: rgb(60, 60, 60); border-radius: 3px; }
 
 .search-sidebar h3 {
-  color: rgb(140, 140, 140);
+  color: rgb(150, 150, 150);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 1.5px;
-  margin: 14px 0 6px;
+  margin: 14px 0 8px;
   text-transform: uppercase;
 }
 .search-sidebar h3:first-child { margin-top: 0; }
@@ -70,7 +70,7 @@ $accent: rgb(0, 230, 118);
   }
 }
 
-.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
 .field label {
   color: rgb(180, 180, 180);
   font-size: 11px;
@@ -117,26 +117,65 @@ $accent: rgb(0, 230, 118);
   z-index: 4;
 }
 
+// Section-divider styling lifted from the mockup's main.results-area
+// h3.section: muted gray, uppercase, 1.5 px tracking, modest weight.
+// Avoids competing with card content the way an accent-green glow did.
 .date-header {
   align-items: baseline;
-  color: rgb(170, 170, 170);
   display: flex;
-  gap: 12px;
+  gap: 8px;
   letter-spacing: 1.5px;
-  margin: 14px 4px 6px;
+  margin: 16px 4px 8px;
   text-transform: uppercase;
 }
 .date-header:first-child { margin-top: 4px; }
 .date-header .date-label {
-  color: $accent;
+  color: rgb(170, 170, 170);
   font-size: 11px;
-  font-weight: 600;
-  text-shadow: 0 0 4px rgba(0, 230, 118, 0.25);
+  font-weight: 500;
 }
 .date-header .date-count {
   color: rgb(120, 120, 120);
   font-size: 10px;
 }
+
+/* Chunky bevelled play/pause used in cards + dock + result rows. */
+.btn-play {
+  align-items: center;
+  background: $chassis;
+  border-top: 1px solid $bevel-light;
+  border-left: 1px solid $bevel-light;
+  border-right: 1px solid $bevel-dark;
+  border-bottom: 1px solid $bevel-dark;
+  color: $accent;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  text-shadow: 0 0 4px rgba(0, 230, 118, 0.4);
+  width: 34px;
+  &:active { position: relative; top: 1px; transform: scale(0.98); }
+  mat-icon { font-size: 20px; height: 20px; line-height: 20px; width: 20px; }
+}
+.dock-play { height: 36px; width: 40px; }
+
+.icon-btn {
+  background: transparent;
+  border: 0;
+  color: rgb(180, 180, 180);
+  cursor: pointer;
+  padding: 6px;
+  &.subtle { color: rgb(150, 150, 150); }
+  &:hover { color: $accent; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+  &:disabled:hover { color: rgb(180, 180, 180); }
+  mat-icon { font-size: 20px; height: 20px; line-height: 20px; width: 20px; }
+}
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
 
 /* Mobile breakpoint — sidebar collapses to slide-in */
 @media (max-width: 720px) {
