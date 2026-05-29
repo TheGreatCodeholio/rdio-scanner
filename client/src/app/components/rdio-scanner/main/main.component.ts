@@ -579,7 +579,11 @@ export class RdioScannerMainComponent implements OnDestroy, OnInit {
         }
 
         if ('peaks' in event && Array.isArray(event.peaks)) {
-            this.peaks = event.peaks;
+            // Service now emits a high-res (~1024) peak array sized for
+            // the search dock's canvas ribbon. The drawer's SVG bar
+            // template assumes 64 bars (viewBox 0 0 64 30) — keep that
+            // layout by max-pool downsampling to bar count here.
+            this.peaks = this.downsamplePeaks(event.peaks, 64);
         }
 
         if ('volume' in event && typeof event.volume === 'number') {
@@ -672,6 +676,26 @@ export class RdioScannerMainComponent implements OnDestroy, OnInit {
 
     private formatAfs(n: number): string {
         return `${(n >> 7 & 15).toString().padStart(2, '0')}-${(n >> 3 & 15).toString().padStart(2, '0')}${n & 7}`;
+    }
+
+    // Max-pool downsample a peak array to `n` buckets. Used to keep the
+    // drawer's SVG bar template at its expected 64-bar geometry while
+    // the service emits a much higher-res array for the search dock's
+    // canvas ribbon. No-op if src already has <= n entries.
+    private downsamplePeaks(src: number[], n: number): number[] {
+        if (src.length <= n) return src;
+        const out = new Array<number>(n);
+        const step = src.length / n;
+        for (let i = 0; i < n; i++) {
+            const from = Math.floor(i * step);
+            const to = Math.max(from + 1, Math.floor((i + 1) * step));
+            let peak = 0;
+            for (let j = from; j < to && j < src.length; j++) {
+                if (src[j] > peak) peak = src[j];
+            }
+            out[i] = peak;
+        }
+        return out;
     }
 
     private formatFrequency(frequency: number | undefined): string {

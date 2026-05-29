@@ -26,7 +26,9 @@ import {
     ViewChild,
 } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
-import { BehaviorSubject } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { BehaviorSubject, Subscription } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import {
     RdioScannerCall,
     RdioScannerConfig,
@@ -41,6 +43,13 @@ import { RdioScannerService } from '../rdio-scanner.service';
 import { WaveformRibbon } from './waveform-ribbon';
 
 type PresetKey = 'hour' | 'today' | 'day' | 'week' | null;
+
+/** A single rendered row in the results scroll — either a call card or a
+ *  "Today · N", "Yesterday · N", "May 27 · N" group header. The header
+ *  rows are computed client-side from the call timestamps. */
+export type DisplayItem =
+    | { kind: 'header'; label: string; count: number; key: string }
+    | { kind: 'call'; call: RdioScannerCall | null; key: string };
 
 @Component({
     selector: 'rdio-scanner-search',
@@ -70,6 +79,10 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
     paused = false;
 
     results = new BehaviorSubject<Array<RdioScannerCall | null>>(new Array<RdioScannerCall | null>(20));
+    /** Flat list of rendered items: each entry is either a call row or a
+     *  date-header row marking a transition between adjacent calls on
+     *  different days. Recomputed in lock-step with `results.next()`. */
+    displayItems = new BehaviorSubject<DisplayItem[]>([]);
     resultsPending = false;
 
     time12h = false;
@@ -86,6 +99,7 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
     private config: RdioScannerConfig | undefined;
 
     private eventSubscription;
+    private querySubscription: Subscription | undefined;
 
     private limit = 200;
     private offset = 0;
@@ -108,9 +122,11 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
         private rdioScannerService: RdioScannerService,
         private ngChangeDetectorRef: ChangeDetectorRef,
         private ngFormBuilder: FormBuilder,
+        private matSnackBar: MatSnackBar,
     ) {
         this.form = this.ngFormBuilder.group<{
-            date: string | null;
+            dateStart: string | null;
+            dateEnd: string | null;
             group: number;
             query: string;
             sort: number;
@@ -119,7 +135,8 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
             talkgroup: number;
             unit: number | null;
         }>({
-            date: null,
+            dateStart: null,
+            dateEnd: null,
             group: -1,
             query: '',
             sort: -1,
@@ -131,6 +148,17 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
 
         this.eventSubscription = this.rdioScannerService.event
             .subscribe((event: RdioScannerEvent) => this.eventHandler(event));
+
+        // Debounce keystroke-driven query searches so typing doesn't
+        // spam the server one request per letter. 300 ms is long enough
+        // to consolidate fast typing without feeling sluggish.
+        const queryCtrl = this.form.get('query');
+        if (queryCtrl) {
+            this.querySubscription = queryCtrl.valueChanges.pipe(
+                debounceTime(300),
+                distinctUntilChanged(),
+            ).subscribe(() => this.formChangeHandler());
+        }
     }
 
     ngAfterViewInit(): void {
@@ -140,6 +168,7 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
 
     ngOnDestroy(): void {
         this.eventSubscription.unsubscribe();
+        this.querySubscription?.unsubscribe();
         this.ribbon?.destroy();
         this.ribbon = undefined;
         this.resultsResizeObserver?.disconnect();
@@ -189,6 +218,14 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
         this.refreshResults();
     }
 
+    /** When the active filter pins to a single system, return its label
+     *  so the results header can show "594 results · Bradford County PA"
+     *  instead of just the count. Empty string otherwise. */
+    contextSystemLabel(): string {
+        const sys = this.getSelectedSystem();
+        return sys?.label || '';
+    }
+
     pageIndicator(): string {
         const total = this.playbackList?.count || 0;
         if (!total) return '— of —';
@@ -203,16 +240,37 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
     applyPreset(key: Exclude<PresetKey, null>): void {
         const now = new Date();
         let from: Date;
-        if (key === 'hour') from = new Date(now.getTime() - 60 * 60 * 1000);
-        else if (key === 'today') { from = new Date(now); from.setHours(0, 0, 0, 0); }
-        else if (key === 'day') from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        else from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (key === 'hour') {
+            from = new Date(now.getTime() - 60 * 60 * 1000);
+        } else if (key === 'today') {
+            from = new Date(now);
+            from.setHours(0, 0, 0, 0);
+        } else if (key === 'day') {
+            from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        } else {
+            from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
         this.activePreset = key;
-        // Format as datetime-local string. Server widens any picked time to
-        // a 24h window today; once Phase 2 lands a real range, both ends
-        // of the preset will be honored.
-        const iso = new Date(from.getTime() - from.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        this.form.patchValue({ date: iso });
+        this.form.patchValue({
+            dateStart: this.toLocalISO(from),
+            dateEnd: this.toLocalISO(now),
+        });
+        this.formChangeHandler();
+    }
+
+    /** Convert a Date to the `YYYY-MM-DDTHH:mm` string a datetime-local
+     *  input expects, in local time. Manual rendering is needed because
+     *  Date.toISOString() emits UTC, which a local-time input would
+     *  re-interpret as local — shifting the value by the TZ offset. */
+    private toLocalISO(d: Date): string {
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    /** Called whenever the user manually edits a date input. Clears the
+     *  active-preset chip so it doesn't mislead. */
+    onDateChange(): void {
+        this.activePreset = null;
         this.formChangeHandler();
     }
 
@@ -309,12 +367,58 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
                 calls.push(null);
             }
             this.results.next(calls);
+            this.displayItems.next(this.buildDisplayItems(calls));
         }
+    }
+
+    /** Walk the page's calls and emit a flat array with date-group
+     *  headers inserted at day boundaries. Skeleton (`null`) rows pass
+     *  through unchanged; they're grouped under the most recent header.
+     *  Header count is *only* the calls on this page in that group —
+     *  not the total in the archive — to avoid implying a global count
+     *  the user can't actually click to see. */
+    private buildDisplayItems(calls: Array<RdioScannerCall | null>): DisplayItem[] {
+        const out: DisplayItem[] = [];
+        let currentKey = '';
+        let currentHeader: Extract<DisplayItem, { kind: 'header' }> | null = null;
+
+        for (let i = 0; i < calls.length; i++) {
+            const c = calls[i];
+            const key = c ? this.dateKey(c.dateTime) : currentKey;
+            if (key !== currentKey) {
+                currentHeader = { kind: 'header', label: this.dateLabel(c?.dateTime), count: 0, key };
+                out.push(currentHeader);
+                currentKey = key;
+            }
+            if (currentHeader && c) currentHeader.count++;
+            out.push({ kind: 'call', call: c, key: `${key}-${i}` });
+        }
+        return out;
+    }
+
+    private dateKey(d: Date | string): string {
+        const dt = (d instanceof Date) ? d : new Date(d);
+        return `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`;
+    }
+
+    private dateLabel(d: Date | string | undefined): string {
+        if (!d) return '';
+        const dt = (d instanceof Date) ? d : new Date(d);
+        const now = new Date();
+        const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+        if (this.dateKey(dt) === this.dateKey(now)) return 'Today';
+        if (this.dateKey(dt) === this.dateKey(yest)) return 'Yesterday';
+        const sameYear = dt.getFullYear() === now.getFullYear();
+        const opts: Intl.DateTimeFormatOptions = sameYear
+            ? { month: 'short', day: 'numeric' }
+            : { month: 'short', day: 'numeric', year: 'numeric' };
+        return dt.toLocaleDateString(undefined, opts);
     }
 
     resetForm(): void {
         this.form.reset({
-            date: null,
+            dateStart: null,
+            dateEnd: null,
             group: -1,
             query: '',
             sort: -1,
@@ -341,8 +445,13 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
             sort: this.form.get('sort')?.value ?? -1,
         };
 
-        if (typeof this.form.value.date === 'string' && this.form.value.date) {
-            options.date = new Date(Date.parse(this.form.value.date));
+        const startVal = this.form.value.dateStart;
+        const endVal = this.form.value.dateEnd;
+        if (typeof startVal === 'string' && startVal) {
+            options.dateStart = new Date(Date.parse(startVal));
+        }
+        if (typeof endVal === 'string' && endVal) {
+            options.dateEnd = new Date(Date.parse(endVal));
         }
 
         if ((this.form.get('group')?.value ?? -1) >= 0) {
@@ -365,17 +474,26 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
             if (talkgroup) options.talkgroup = talkgroup.id;
         }
 
-        // Unit + query are populated client-side for now; server-side
-        // support lands in Phase 2 (CallsSearchOptions doesn't yet expose
-        // a Unit field, and there's no free-text search at all).
+        // Unit filter is wired client-side but server CallsSearchOptions
+        // still lacks a Unit field — sent anyway so a future server
+        // version can honour it without a client change.
         const unitVal = this.form.get('unit')?.value;
         if (typeof unitVal === 'number' && unitVal > 0) {
             options.unit = unitVal;
         }
 
-        this.resultsPending = true;
-        this.form.disable({ emitEvent: false });
+        const queryVal = this.form.get('query')?.value;
+        if (typeof queryVal === 'string' && queryVal.trim()) {
+            options.query = queryVal.trim();
+        }
 
+        this.resultsPending = true;
+        // Form is intentionally kept enabled so the user can refine
+        // filters / keep typing while a previous request is in flight.
+        // The eventHandler discards stale responses by overwriting
+        // playbackList wholesale, so a slow earlier reply briefly
+        // overwriting a faster later one is a self-correcting cosmetic
+        // blip rather than a data integrity issue.
         this.rdioScannerService.searchCalls(options);
     }
 
@@ -433,6 +551,24 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
 
     downloadCurrent(): void {
         if (this.call) this.download(+this.call.id);
+    }
+
+    /** Copy a shareable URL pointing at the current call to the clipboard.
+     *  Format: <origin><pathname>?call=<id> — independent of whatever
+     *  query string is currently in the address bar, so navigating back
+     *  on the same machine reproduces the panel state. */
+    copyPermalink(): void {
+        if (!this.call) return;
+        const url = `${window.location.origin}${window.location.pathname}?call=${this.call.id}`;
+        const fallback = () => this.matSnackBar.open(url, 'OK', { duration: 6000 });
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(
+                () => this.matSnackBar.open('Permalink copied', '', { duration: 2000 }),
+                () => fallback(),
+            );
+        } else {
+            fallback();
+        }
     }
 
     // --- Time formatting (matches the main view drawer's m:ss.mmm / h:mm:ss.mmm) ---
@@ -506,7 +642,6 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
             this.playbackList = event.playbackList;
             this.refreshResults();
             this.resultsPending = false;
-            this.form.enable({ emitEvent: false });
 
             // Cards render this change-detection tick; re-measure on the
             // next microtask so autoFitPageSize sees the real card height

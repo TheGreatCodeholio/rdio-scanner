@@ -616,6 +616,22 @@ func (calls *Calls) Search(searchOptions *CallsSearchOptions, client *Client) (*
 		}
 	}
 
+	// Free-text query — LIKE against talkgroup label/name + system label.
+	// SQL injection guard: we replace ' with '' inside the term, never
+	// inject raw user input. SQLite + Postgres both honour LIKE; we use
+	// lower() for case-insensitive matching across both dialects.
+	if q, ok := searchOptions.Query.(string); ok && q != "" {
+		safe := strings.ReplaceAll(q, "'", "''")
+		safe = strings.ReplaceAll(safe, "%", `\%`)
+		safe = strings.ReplaceAll(safe, "_", `\_`)
+		lower := strings.ToLower(safe)
+		pat := fmt.Sprintf("'%%%s%%'", lower)
+		where += fmt.Sprintf(
+			` AND (lower(t."label") LIKE %s OR lower(t."name") LIKE %s OR lower(s."label") LIKE %s)`,
+			pat, pat, pat,
+		)
+	}
+
 	// Aggregate MIN/MAX in one round-trip; with idx_calls_timestamp these
 	// resolve as index lookups rather than full sorts of the filtered set.
 	var minTs, maxTs sql.NullInt64
@@ -642,23 +658,46 @@ func (calls *Calls) Search(searchOptions *CallsSearchOptions, client *Client) (*
 		order = ascOrder
 	}
 
-	switch v := searchOptions.Date.(type) {
-	case time.Time:
-		var (
-			start time.Time
-			stop  time.Time
-		)
+	// Date filtering — prefer the explicit [DateStart, DateEnd] range
+	// when either is supplied. Falls back to the legacy single-Date
+	// 24 h window so older clients keep working.
+	var (
+		rangeStart, rangeEnd *time.Time
+	)
+	if t, ok := searchOptions.DateStart.(time.Time); ok {
+		rangeStart = &t
+	}
+	if t, ok := searchOptions.DateEnd.(time.Time); ok {
+		rangeEnd = &t
+	}
 
-		if order == ascOrder {
-			start = time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), 0, 0, time.UTC)
-			stop = start.Add(time.Hour*24 - time.Millisecond)
-
+	if rangeStart != nil || rangeEnd != nil {
+		if rangeStart != nil && rangeEnd != nil {
+			where += fmt.Sprintf(` AND (c."timestamp" BETWEEN %d AND %d)`, rangeStart.UnixMilli(), rangeEnd.UnixMilli())
+		} else if rangeStart != nil {
+			where += fmt.Sprintf(` AND c."timestamp" >= %d`, rangeStart.UnixMilli())
 		} else {
-			start = time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), 0, 0, time.UTC).Add(time.Hour*-24 + time.Millisecond)
-			stop = time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), 0, 0, time.UTC)
+			where += fmt.Sprintf(` AND c."timestamp" <= %d`, rangeEnd.UnixMilli())
 		}
+	} else {
+		switch v := searchOptions.Date.(type) {
+		case time.Time:
+			var (
+				start time.Time
+				stop  time.Time
+			)
 
-		where += fmt.Sprintf(` AND (c."timestamp" BETWEEN %d AND %d)`, start.UnixMilli(), stop.UnixMilli())
+			if order == ascOrder {
+				start = time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), 0, 0, time.UTC)
+				stop = start.Add(time.Hour*24 - time.Millisecond)
+
+			} else {
+				start = time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), 0, 0, time.UTC).Add(time.Hour*-24 + time.Millisecond)
+				stop = time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), 0, 0, time.UTC)
+			}
+
+			where += fmt.Sprintf(` AND (c."timestamp" BETWEEN %d AND %d)`, start.UnixMilli(), stop.UnixMilli())
+		}
 	}
 
 	switch v := searchOptions.Limit.(type) {
@@ -811,10 +850,16 @@ func (calls *Calls) WriteCall(call *Call, db *Database) (uint64, error) {
 }
 
 type CallsSearchOptions struct {
+	// Date is the legacy single-date filter — server widens it to a
+	// 24 h window (direction depends on Sort). Kept for backward
+	// compatibility with older clients. Prefer DateStart/DateEnd.
 	Date      any `json:"date,omitempty"`
+	DateStart any `json:"dateStart,omitempty"`
+	DateEnd   any `json:"dateEnd,omitempty"`
 	Group     any `json:"group,omitempty"`
 	Limit     any `json:"limit,omitempty"`
 	Offset    any `json:"offset,omitempty"`
+	Query     any `json:"query,omitempty"`
 	Sort      any `json:"sort,omitempty"`
 	System    any `json:"system,omitempty"`
 	Tag       any `json:"tag,omitempty"`
@@ -833,6 +878,20 @@ func (searchOptions *CallsSearchOptions) fromMap(m map[string]any) *CallsSearchO
 		}
 	}
 
+	switch v := m["dateStart"].(type) {
+	case string:
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			searchOptions.DateStart = t
+		}
+	}
+
+	switch v := m["dateEnd"].(type) {
+	case string:
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			searchOptions.DateEnd = t
+		}
+	}
+
 	switch v := m["group"].(type) {
 	case string:
 		searchOptions.Group = v
@@ -846,6 +905,14 @@ func (searchOptions *CallsSearchOptions) fromMap(m map[string]any) *CallsSearchO
 	switch v := m["offset"].(type) {
 	case float64:
 		searchOptions.Offset = uint(v)
+	}
+
+	switch v := m["query"].(type) {
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed != "" {
+			searchOptions.Query = trimmed
+		}
 	}
 
 	switch v := m["sort"].(type) {
