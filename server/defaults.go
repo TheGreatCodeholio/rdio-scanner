@@ -59,6 +59,7 @@ type DefaultOptions struct {
 	autoPopulate                bool
 	audioConversion             uint
 	dimmerDelay                 uint
+	disableDownloads            bool
 	disableDuplicateDetection   bool
 	duplicateDetectionTimeFrame uint
 	keypadBeeps                 string
@@ -103,6 +104,7 @@ var defaults Defaults = Defaults{
 		audioConversion:             AUDIO_CONVERSION_ENABLED,
 		autoPopulate:                true,
 		dimmerDelay:                 5000,
+		disableDownloads:            false,
 		disableDuplicateDetection:   false,
 		duplicateDetectionTimeFrame: 500,
 		keypadBeeps:                 "uniden",

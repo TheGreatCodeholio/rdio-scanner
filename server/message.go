@@ -35,8 +35,17 @@ const (
 	MessageCommandMax            = "MAX"
 	MessageCommandPin            = "PIN"
 	MessageCommandPushId         = "PID"
+	MessageCommandReauth         = "RAU"
 	MessageCommandServer         = "SRV"
 	MessageCommandVersion        = "VER"
+)
+
+// Call message flags (third element of a CAL message). The client tags a call
+// request as a download or a playback; only the download path is gated by the
+// disable-downloads option.
+const (
+	MessageFlagDownload = "d"
+	MessageFlagPlay     = "p"
 )
 
 type Message struct {

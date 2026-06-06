@@ -27,6 +27,8 @@ import { AppUpdateService } from '../../../shared/update/update.service';
 export interface Access {
     id?: string;
     code?: string;
+    allowDownloads?: boolean;
+    disabled?: boolean;
     expiration?: Date;
     ident?: string;
     limit?: number;
@@ -121,6 +123,13 @@ export interface Group {
     order?: number;
 }
 
+export interface ConnectedClient {
+    id: string;
+    ident: string;
+    ip: string;
+    connectedAt: string;
+}
+
 export interface Log {
     id?: number;
     dateTime: Date;
@@ -149,6 +158,7 @@ export interface Options {
     autoPopulate?: boolean;
     branding?: string;
     dimmerDelay?: number;
+    disableDownloads?: boolean;
     disableDuplicateDetection?: boolean;
     duplicateDetectionTimeFrame?: number;
     email?: string;
@@ -218,6 +228,7 @@ export interface Unit {
 
 enum url {
     alerts = 'alerts',
+    clients = 'clients',
     config = 'config',
     login = 'login',
     logout = 'logout',
@@ -336,6 +347,35 @@ export class RdioScannerAdminService implements OnDestroy {
 
     getLeds(): string[] {
         return ['blue', 'cyan', 'green', 'magenta', 'orange', 'red', 'white', 'yellow'];
+    }
+
+    async getClients(): Promise<ConnectedClient[] | undefined> {
+        try {
+            const res = await firstValueFrom(this.ngHttpClient.get<ConnectedClient[]>(
+                this.getUrl(url.clients),
+                { headers: this.getHeaders(), responseType: 'json' },
+            ));
+
+            return res;
+
+        } catch (error) {
+            this.errorHandler(error);
+
+            return undefined;
+        }
+    }
+
+    async disconnectClient(id: string): Promise<void> {
+        try {
+            await firstValueFrom(this.ngHttpClient.post(
+                this.getUrl(url.clients),
+                { id },
+                { headers: this.getHeaders(), responseType: 'text' },
+            ));
+
+        } catch (error) {
+            this.errorHandler(error);
+        }
     }
 
     async getLogs(options: LogsQueryOptions): Promise<LogsQuery | undefined> {
@@ -484,6 +524,8 @@ export class RdioScannerAdminService implements OnDestroy {
         return this.ngFormBuilder.group({
             id: this.ngFormBuilder.nonNullable.control(access?.id),
             code: this.ngFormBuilder.nonNullable.control(access?.code, [Validators.required, this.validateAccessCode()]),
+            allowDownloads: this.ngFormBuilder.nonNullable.control(access?.allowDownloads ?? false),
+            disabled: this.ngFormBuilder.nonNullable.control(access?.disabled ?? false),
             expiration: this.ngFormBuilder.nonNullable.control(access?.expiration),
             ident: this.ngFormBuilder.nonNullable.control(access?.ident, Validators.required),
             limit: this.ngFormBuilder.nonNullable.control(access?.limit),
@@ -562,6 +604,7 @@ export class RdioScannerAdminService implements OnDestroy {
             autoPopulate: this.ngFormBuilder.control(options?.autoPopulate),
             branding: this.ngFormBuilder.control(options?.branding),
             dimmerDelay: this.ngFormBuilder.control(options?.dimmerDelay, [Validators.required, Validators.min(0)]),
+            disableDownloads: this.ngFormBuilder.control(options?.disableDownloads),
             disableDuplicateDetection: this.ngFormBuilder.control(options?.disableDuplicateDetection),
             duplicateDetectionTimeFrame: this.ngFormBuilder.control(options?.duplicateDetectionTimeFrame, [Validators.required, Validators.min(0)]),
             email: this.ngFormBuilder.control(options?.email),

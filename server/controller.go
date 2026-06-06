@@ -419,6 +419,13 @@ func (controller *Controller) ProcessMessageCommandCall(client *Client, message 
 	}
 
 	if !controller.Accesses.IsRestricted() || client.Access.HasAccess(call) {
+		// Gate the download path when downloads are globally disabled, unless
+		// this access code is granted an explicit override. Playback (Play
+		// flag) is never gated — only the explicit download is refused.
+		if message.Flag == MessageFlagDownload && controller.Options.DisableDownloads && !client.Access.AllowDownloads {
+			return nil
+		}
+
 		client.Send <- &Message{Command: MessageCommandCall, Payload: call, Flag: message.Flag}
 	}
 

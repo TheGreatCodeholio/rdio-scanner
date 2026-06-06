@@ -172,11 +172,13 @@
                 }
               </div>
               <span class="dur">{{ formatDurShort(item.call.duration) }}</span>
-              <button type="button" class="icon-btn subtle dl"
-                (click)="$event.stopPropagation(); download(+item.call.id)"
-                aria-label="Download">
-                <mat-icon>save_alt</mat-icon>
-              </button>
+              @if (!downloadsDisabled) {
+                <button type="button" class="icon-btn subtle dl"
+                  (click)="$event.stopPropagation(); download(+item.call.id)"
+                  aria-label="Download">
+                  <mat-icon>save_alt</mat-icon>
+                </button>
+              }
             </div>
           } @else {
             <div class="result-card skeleton"></div>
@@ -247,10 +249,12 @@
     </div>
 
     <div class="dock-actions">
-      <button type="button" class="icon-btn subtle"
-        [disabled]="!call" (click)="downloadCurrent()" aria-label="Download current">
-        <mat-icon>save_alt</mat-icon>
-      </button>
+      @if (!downloadsDisabled) {
+        <button type="button" class="icon-btn subtle"
+          [disabled]="!call" (click)="downloadCurrent()" aria-label="Download current">
+          <mat-icon>save_alt</mat-icon>
+        </button>
+      }
 
       <button type="button" class="icon-btn subtle dock-permalink"
         [disabled]="!call" (click)="copyPermalink()" aria-label="Copy permalink">

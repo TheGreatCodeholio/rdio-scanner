@@ -60,6 +60,26 @@
         </div>
         <div class="row">
           <p>
+            <span class="mat-body">Allow Downloads</span><br>
+            <span class="mat-caption">Let this access code download call audio from the archive even when
+            downloads are globally disabled.</span>
+          </p>
+          <div>
+            <mat-slide-toggle color="primary" formControlName="allowDownloads"></mat-slide-toggle>
+          </div>
+        </div>
+        <div class="row">
+          <p>
+            <span class="mat-body">Disabled</span><br>
+            <span class="mat-caption">Disable the access code. Listeners currently using it are forced to
+            re-authenticate and cannot reconnect with it until re-enabled.</span>
+          </p>
+          <div>
+            <mat-slide-toggle color="primary" formControlName="disabled"></mat-slide-toggle>
+          </div>
+        </div>
+        <div class="row">
+          <p>
             <span class="mat-body">Expiration</span><br>
             <span class="mat-caption">Expiration date for this access code.</span>
           </p>

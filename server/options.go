@@ -36,6 +36,7 @@ type Options struct {
 	AutoPopulate                bool   `json:"autoPopulate"`
 	Branding                    string `json:"branding"`
 	DimmerDelay                 uint   `json:"dimmerDelay"`
+	DisableDownloads            bool   `json:"disableDownloads"`
 	DisableDuplicateDetection   bool   `json:"disableDuplicateDetection"`
 	DuplicateDetectionTimeFrame uint   `json:"duplicateDetectionTimeFrame"`
 	Email                       string `json:"email"`
@@ -109,6 +110,13 @@ func (options *Options) FromMap(m map[string]any) *Options {
 		} else {
 			options.AudioConversion = 0
 		}
+	}
+
+	switch v := m["disableDownloads"].(type) {
+	case bool:
+		options.DisableDownloads = v
+	default:
+		options.DisableDownloads = defaults.options.disableDownloads
 	}
 
 	switch v := m["disableDuplicateDetection"].(type) {
@@ -202,6 +210,7 @@ func (options *Options) Read(db *Database) error {
 	options.AudioConversion = defaults.options.audioConversion
 	options.AutoPopulate = defaults.options.autoPopulate
 	options.DimmerDelay = defaults.options.dimmerDelay
+	options.DisableDownloads = defaults.options.disableDownloads
 	options.DisableDuplicateDetection = defaults.options.disableDuplicateDetection
 	options.DuplicateDetectionTimeFrame = defaults.options.duplicateDetectionTimeFrame
 	options.KeypadBeeps = defaults.options.keypadBeeps
@@ -286,6 +295,13 @@ func (options *Options) Read(db *Database) error {
 				switch v := f.(type) {
 				case float64:
 					options.DimmerDelay = uint(v)
+				}
+			}
+		case "disableDownloads":
+			if err = json.Unmarshal([]byte(value.String), &f); err == nil {
+				switch v := f.(type) {
+				case bool:
+					options.DisableDownloads = v
 				}
 			}
 		case "disableDuplicateDetection":
@@ -434,6 +450,7 @@ func (options *Options) Write(db *Database) error {
 	set("autoPopulate", options.AutoPopulate)
 	set("branding", options.Branding)
 	set("dimmerDelay", options.DimmerDelay)
+	set("disableDownloads", options.DisableDownloads)
 	set("disableDuplicateDetection", options.DisableDuplicateDetection)
 	set("duplicateDetectionTimeFrame", options.DuplicateDetectionTimeFrame)
 	set("email", options.Email)

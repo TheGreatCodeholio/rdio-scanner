@@ -60,6 +60,7 @@ enum WebsocketCommand {
     LivefeedMap = 'LFM',
     Max = 'MAX',
     Pin = 'PIN',
+    Reauth = 'RAU',
     Version = 'VER',
 }
 
@@ -116,6 +117,7 @@ export class RdioScannerService implements OnDestroy {
 
     private config: RdioScannerConfig = {
         dimmerDelay: false,
+        disableDownloads: false,
         groups: {},
         groupsData: [],
         keypadBeeps: undefined,
@@ -1214,6 +1216,7 @@ export class RdioScannerService implements OnDestroy {
                         alerts: config.alerts,
                         branding: typeof config.branding === 'string' ? config.branding : '',
                         dimmerDelay: typeof config.dimmerDelay === 'number' ? config.dimmerDelay : 5000,
+                        disableDownloads: typeof config.disableDownloads === 'boolean' ? config.disableDownloads : false,
                         email: typeof config.email === 'string' ? config.email : '',
                         groups: typeof config.groups !== null && typeof config.groups === 'object' ? config.groups : {},
                         groupsData: Array.isArray(config.groupsData) ? config.groupsData : [],
@@ -1285,6 +1288,16 @@ export class RdioScannerService implements OnDestroy {
                     break;
 
                 case WebsocketCommand.Pin:
+                    this.event.emit({ auth: true });
+
+                    break;
+
+                case WebsocketCommand.Reauth:
+                    // Admin forced re-authentication: drop the cached PIN so
+                    // the auth form is shown instead of silently resubmitting
+                    // the stored code.
+                    this.clearPin();
+
                     this.event.emit({ auth: true });
 
                     break;

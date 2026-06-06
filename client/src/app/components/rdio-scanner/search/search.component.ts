@@ -87,6 +87,8 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
     displayItems = new BehaviorSubject<DisplayItem[]>([]);
     resultsPending = false;
 
+    downloadsDisabled = false;
+
     time12h = false;
 
     // --- Dock player state ---
@@ -372,11 +374,24 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
         const from = this.pageIndex * this.pageSize;
         const to = from + this.pageSize - 1;
 
-        if (!this.callPending && (from >= this.offset + this.limit || from < this.offset)) {
+        // Page is fully usable from the cache only when BOTH endpoints
+        // sit inside the currently fetched window. Checking just `from`
+        // (the old condition) broke when pageSize didn't divide limit
+        // evenly — a page could start in-chunk but end out-of-chunk,
+        // producing an empty slice and skeleton rows.
+        const cached = !!this.playbackList
+            && from >= this.offset
+            && to < this.offset + this.limit;
+
+        if (!cached && !this.callPending) {
             this.searchCalls();
-        } else if (this.playbackList) {
+            return;
+        }
+
+        if (this.playbackList) {
+            const localStart = from - this.offset;
             const calls: Array<RdioScannerCall | null> = this.playbackList.results
-                .slice(from % this.limit, (to % this.limit) + 1);
+                .slice(localStart, localStart + this.pageSize);
             while (calls.length < this.pageSize) {
                 calls.push(null);
             }
@@ -451,7 +466,12 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
             return;
         }
 
-        this.offset = Math.floor((this.pageIndex * this.pageSize) / this.limit) * this.limit;
+        // Page-aligned offset (not chunk-aligned) so the requested page
+        // is guaranteed to be the start of the returned window, no
+        // matter how pageSize divides into limit. We still cache `limit`
+        // rows per fetch, so subsequent pages within `limit` rows of the
+        // current page reuse the cache.
+        this.offset = this.pageIndex * this.pageSize;
 
         const options: RdioScannerSearchOptions = {
             limit: this.limit,
@@ -518,6 +538,7 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
     }
 
     download(id: number): void {
+        if (this.downloadsDisabled) return;
         this.rdioScannerService.loadAndDownload(id);
     }
 
@@ -645,6 +666,7 @@ export class RdioScannerSearchComponent implements AfterViewInit, OnDestroy {
             this.optionsSystem = (this.config?.systems || []).map((system) => system.label);
             this.optionsTag = Object.keys(this.config?.tags || []).sort((a, b) => a.localeCompare(b));
             this.time12h = this.config?.time12hFormat || false;
+            this.downloadsDisabled = this.config?.disableDownloads || false;
         }
 
         if ('livefeedMode' in event) {

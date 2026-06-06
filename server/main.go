@@ -131,6 +131,8 @@ func main() {
 
 	http.HandleFunc("/api/admin/alerts", controller.Admin.AlertsHandler)
 
+	http.HandleFunc("/api/admin/clients", controller.Admin.ClientsHandler)
+
 	http.HandleFunc("/api/admin/config", controller.Admin.ConfigHandler)
 
 	http.HandleFunc("/api/admin/login", controller.Admin.LoginHandler)
