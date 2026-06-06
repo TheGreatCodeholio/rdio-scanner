@@ -313,6 +313,7 @@ func (admin *Admin) ConfigHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			admin.Controller.Clients.ReauthRevoked(admin.Controller.Accesses)
 			admin.Controller.EmitConfig()
 			admin.Controller.Dirwatches.Start(admin.Controller)
 
@@ -389,6 +390,49 @@ func (admin *Admin) LogsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Write(b)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (admin *Admin) ClientsHandler(w http.ResponseWriter, r *http.Request) {
+	t := admin.GetAuthorization(r)
+	if !admin.ValidateToken(t) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		b, err := json.Marshal(admin.Controller.Clients.GetConnected())
+		if err != nil {
+			admin.Controller.Logs.LogEvent(LogLevelError, err.Error())
+			w.WriteHeader(http.StatusExpectationFailed)
+			return
+		}
+
+		w.Write(b)
+
+	case http.MethodPost:
+		m := map[string]any{}
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		id, _ := m["id"].(string)
+		if id == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if !admin.Controller.Clients.Disconnect(id) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

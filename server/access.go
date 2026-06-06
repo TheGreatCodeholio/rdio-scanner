@@ -33,6 +33,7 @@ import (
 type Access struct {
 	Id         uint64
 	Code       string
+	Disabled   bool
 	Expiration uint64
 	Ident      string
 	Limit      uint
@@ -53,6 +54,11 @@ func (access *Access) FromMap(m map[string]any) *Access {
 	switch v := m["code"].(type) {
 	case string:
 		access.Code = v
+	}
+
+	switch v := m["disabled"].(type) {
+	case bool:
+		access.Disabled = v
 	}
 
 	switch v := m["expiration"].(type) {
@@ -137,10 +143,11 @@ func (access *Access) MarshalJSON() ([]byte, error) {
 	}
 
 	m := map[string]any{
-		"id":      access.Id,
-		"code":    code,
-		"ident":   access.Ident,
-		"systems": access.Systems,
+		"id":       access.Id,
+		"code":     code,
+		"disabled": access.Disabled,
+		"ident":    access.Ident,
+		"systems":  access.Systems,
 	}
 
 	if access.Expiration > 0 {
@@ -165,10 +172,11 @@ func (access *Access) MarshalJSON() ([]byte, error) {
 // without re-entry preserves the existing DB row.
 func (access *Access) ToAdminMap(secret string) map[string]any {
 	m := map[string]any{
-		"id":      access.Id,
-		"code":    CredentialForDisplay(secret, access.Code),
-		"ident":   access.Ident,
-		"systems": access.Systems,
+		"id":       access.Id,
+		"code":     CredentialForDisplay(secret, access.Code),
+		"disabled": access.Disabled,
+		"ident":    access.Ident,
+		"systems":  access.Systems,
 	}
 
 	if access.Expiration > 0 {
@@ -313,7 +321,7 @@ func (accesses *Accesses) GetAccess(secret, code string) (access *Access, ok boo
 
 	var matched *Access
 	for _, a := range accesses.List {
-		if VerifyCredential(secret, a.Code, code) {
+		if !a.Disabled && VerifyCredential(secret, a.Code, code) {
 			matched = a
 		}
 	}
@@ -321,6 +329,22 @@ func (accesses *Accesses) GetAccess(secret, code string) (access *Access, ok boo
 		return nil, false
 	}
 	return matched, true
+}
+
+// HasActiveId reports whether the list still contains an enabled access with
+// the given id. Used after a config reload to decide which connected
+// listeners must re-authenticate because their code was removed or disabled.
+func (accesses *Accesses) HasActiveId(id uint64) bool {
+	accesses.mutex.Lock()
+	defer accesses.mutex.Unlock()
+
+	for _, a := range accesses.List {
+		if a.Id == id && !a.Disabled {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (accesses *Accesses) IsRestricted() bool {
@@ -344,7 +368,7 @@ func (accesses *Accesses) Read(db *Database) error {
 
 	formatError := errorFormatter("accesses", "read")
 
-	query = `SELECT "accessId", "code", "expiration", "ident", "limit", "order", "systems" FROM "accesses"`
+	query = `SELECT "accessId", "code", "disabled", "expiration", "ident", "limit", "order", "systems" FROM "accesses"`
 	if rows, err = db.Sql.Query(query); err != nil {
 		return formatError(err, query)
 	}
@@ -355,7 +379,7 @@ func (accesses *Accesses) Read(db *Database) error {
 			systems string
 		)
 
-		if err = rows.Scan(&access.Id, &access.Code, &access.Expiration, &access.Ident, &access.Limit, &access.Order, &systems); err != nil {
+		if err = rows.Scan(&access.Id, &access.Code, &access.Disabled, &access.Expiration, &access.Ident, &access.Limit, &access.Order, &systems); err != nil {
 			break
 		}
 
@@ -495,9 +519,9 @@ func (accesses *Accesses) Write(db *Database, secret string) error {
 
 		if count == 0 {
 			if db.Config.DbType == DbTypePostgresql {
-				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "expiration", "ident", "limit", "order", "systems") VALUES ($1, %d, $2, %d, %d, $3)`, access.Expiration, access.Limit, access.Order)
+				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "disabled", "expiration", "ident", "limit", "order", "systems") VALUES ($1, %t, %d, $2, %d, %d, $3)`, access.Disabled, access.Expiration, access.Limit, access.Order)
 			} else {
-				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "expiration", "ident", "limit", "order", "systems") VALUES (?, %d, ?, %d, %d, ?)`, access.Expiration, access.Limit, access.Order)
+				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "disabled", "expiration", "ident", "limit", "order", "systems") VALUES (?, %t, %d, ?, %d, %d, ?)`, access.Disabled, access.Expiration, access.Limit, access.Order)
 			}
 			if _, err = tx.Exec(query, access.Code, access.Ident, systems); err != nil {
 				break
@@ -505,9 +529,9 @@ func (accesses *Accesses) Write(db *Database, secret string) error {
 
 		} else {
 			if db.Config.DbType == DbTypePostgresql {
-				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = $1, "expiration" = %d, "ident" = $2, "limit" = %d, "order" = %d, "systems" = $3 WHERE "accessId" = %d`, access.Expiration, access.Limit, access.Order, access.Id)
+				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = $1, "disabled" = %t, "expiration" = %d, "ident" = $2, "limit" = %d, "order" = %d, "systems" = $3 WHERE "accessId" = %d`, access.Disabled, access.Expiration, access.Limit, access.Order, access.Id)
 			} else {
-				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = ?, "expiration" = %d, "ident" = ?, "limit" = %d, "order" = %d, "systems" = ? WHERE "accessId" = %d`, access.Expiration, access.Limit, access.Order, access.Id)
+				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = ?, "disabled" = %t, "expiration" = %d, "ident" = ?, "limit" = %d, "order" = %d, "systems" = ? WHERE "accessId" = %d`, access.Disabled, access.Expiration, access.Limit, access.Order, access.Id)
 			}
 			if _, err = tx.Exec(query, access.Code, access.Ident, systems); err != nil {
 				break

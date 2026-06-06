@@ -24,6 +24,7 @@ var PostgresqlSchema = []string{
 	`CREATE TABLE IF NOT EXISTS "accesses" (
     "accessId" bigserial NOT NULL PRIMARY KEY,
     "code" text NOT NULL,
+    "disabled" boolean NOT NULL DEFAULT false,
     "expiration" bigint NOT NULL DEFAULT 0,
     "ident" text NOT NULL,
     "limit" integer NOT NULL DEFAULT 0,

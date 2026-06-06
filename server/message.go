@@ -35,6 +35,7 @@ const (
 	MessageCommandMax            = "MAX"
 	MessageCommandPin            = "PIN"
 	MessageCommandPushId         = "PID"
+	MessageCommandReauth         = "RAU"
 	MessageCommandServer         = "SRV"
 	MessageCommandVersion        = "VER"
 )

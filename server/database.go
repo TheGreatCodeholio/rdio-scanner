@@ -171,6 +171,10 @@ func (db *Database) migrate() error {
 		return formatError(err, "")
 	}
 
+	if err := migrateAccessesDisabled(db); err != nil {
+		return formatError(err, "")
+	}
+
 	return nil
 }
 

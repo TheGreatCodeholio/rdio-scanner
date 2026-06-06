@@ -22,6 +22,15 @@
       </mat-expansion-panel-header>
       <rdio-scanner-admin-logs #logsComponent></rdio-scanner-admin-logs>
     </mat-expansion-panel>
+    <mat-expansion-panel (afterExpand)="clientsComponent.start()" (afterCollapse)="clientsComponent.stop()">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon>people</mat-icon>
+          Connected listeners
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      <rdio-scanner-admin-clients #clientsComponent></rdio-scanner-admin-clients>
+    </mat-expansion-panel>
     <mat-expansion-panel (afterCollapse)="toolsComponent.closeAll()">
       <mat-expansion-panel-header>
         <mat-panel-title>

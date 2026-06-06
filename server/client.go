@@ -25,26 +25,30 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 type Client struct {
-	Access     *Access
-	AuthCount  int
-	Controller *Controller
-	Conn       *websocket.Conn
-	Send       chan *Message
-	Systems    []System
-	GroupsData []Group
-	GroupsMap  GroupsMap
-	TagsData   []Tag
-	TagsMap    TagsMap
-	Livefeed   *Livefeed
-	SystemsMap SystemsMap
-	request    *http.Request
+	Id          string
+	Access      *Access
+	AuthCount   int
+	Controller  *Controller
+	Conn        *websocket.Conn
+	Send        chan *Message
+	Systems     []System
+	GroupsData  []Group
+	GroupsMap   GroupsMap
+	TagsData    []Tag
+	TagsMap     TagsMap
+	Livefeed    *Livefeed
+	SystemsMap  SystemsMap
+	ConnectedAt time.Time
+	request     *http.Request
 }
 
 func (client *Client) Init(controller *Controller, request *http.Request, conn *websocket.Conn) error {
@@ -72,6 +76,7 @@ func (client *Client) Init(controller *Controller, request *http.Request, conn *
 		return nil
 	}
 
+	client.Id = uuid.NewString()
 	client.Access = NewAccess()
 	client.Controller = controller
 	client.Conn = conn
@@ -154,6 +159,8 @@ func (client *Client) Init(controller *Controller, request *http.Request, conn *
 					if timer != nil {
 						timer.Stop()
 						timer = nil
+
+						client.ConnectedAt = time.Now()
 
 						controller.Register <- client
 
@@ -283,6 +290,102 @@ func (clients *Clients) Add(client *Client) {
 
 func (clients *Clients) Count() int {
 	return len(clients.Map)
+}
+
+// ConnectedClient is a serializable snapshot of one live listener, exposed
+// to the admin dashboard. It intentionally carries the access code's Ident
+// label, never the secret code itself.
+type ConnectedClient struct {
+	Id          string    `json:"id"`
+	Ident       string    `json:"ident"`
+	RemoteAddr  string    `json:"ip"`
+	ConnectedAt time.Time `json:"connectedAt"`
+}
+
+// GetConnected returns a snapshot of all currently-registered listeners,
+// ordered by connection time (longest-connected first) for a stable display.
+func (clients *Clients) GetConnected() []ConnectedClient {
+	clients.mutex.Lock()
+	defer clients.mutex.Unlock()
+
+	list := make([]ConnectedClient, 0, len(clients.Map))
+
+	for c := range clients.Map {
+		ident := ""
+		if c.Access != nil {
+			ident = c.Access.Ident
+		}
+
+		list = append(list, ConnectedClient{
+			Id:          c.Id,
+			Ident:       ident,
+			RemoteAddr:  c.GetRemoteAddr(),
+			ConnectedAt: c.ConnectedAt,
+		})
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].ConnectedAt.Before(list[j].ConnectedAt)
+	})
+
+	return list
+}
+
+// Disconnect forces the listener whose Id matches to authenticate again.
+// Returns false if no live client carries that Id.
+//
+// On a restricted instance it drops the client's server-side access (so it
+// immediately stops receiving restricted calls) and sends a Reauth message,
+// which tells the listener to discard its stored PIN and present the auth
+// form again — a plain socket close would otherwise let the listener silently
+// reconnect with its cached PIN. On an unrestricted instance there is no PIN
+// to re-enter, so the connection is simply closed.
+func (clients *Clients) Disconnect(id string) bool {
+	clients.mutex.Lock()
+	defer clients.mutex.Unlock()
+
+	for c := range clients.Map {
+		if c.Id == id {
+			c.Controller.Logs.LogEvent(LogLevelWarn, fmt.Sprintf("listener at ip %s with ident %q forced to re-authenticate by admin", c.GetRemoteAddr(), c.Access.Ident))
+
+			if c.Controller.Accesses.IsRestricted() {
+				c.Access = NewAccess()
+				c.Send <- &Message{Command: MessageCommandReauth}
+
+			} else {
+				c.Conn.Close()
+			}
+
+			return true
+		}
+	}
+
+	return false
+}
+
+// ReauthRevoked forces re-authentication for every authenticated listener
+// whose access code has been removed or disabled in the supplied (freshly
+// reloaded) access list. This is how disabling a code in the admin dashboard
+// kicks the listeners currently using it: their server-side access is dropped
+// (so they immediately stop receiving restricted calls) and a Reauth message
+// tells them to discard the cached PIN and present the auth form. A disabled
+// code can no longer authenticate (see Accesses.GetAccess), so re-entering it
+// fails until it is re-enabled.
+func (clients *Clients) ReauthRevoked(accesses *Accesses) {
+	clients.mutex.Lock()
+	defer clients.mutex.Unlock()
+
+	for c := range clients.Map {
+		// Id == 0 means the client isn't authenticated against a stored
+		// access code (unrestricted instance, or not yet authenticated).
+		if c.Access == nil || c.Access.Id == 0 || accesses.HasActiveId(c.Access.Id) {
+			continue
+		}
+
+		c.Controller.Logs.LogEvent(LogLevelWarn, fmt.Sprintf("listener at ip %s with ident %q forced to re-authenticate (access code removed or disabled)", c.GetRemoteAddr(), c.Access.Ident))
+		c.Access = NewAccess()
+		c.Send <- &Message{Command: MessageCommandReauth}
+	}
 }
 
 func (clients *Clients) EmitCall(call *Call, restricted bool) {

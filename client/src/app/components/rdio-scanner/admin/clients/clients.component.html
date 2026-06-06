@@ -1,0 +1,58 @@
+<mat-table [dataSource]="clients">
+  <ng-container matColumnDef="ident">
+    <mat-header-cell *matHeaderCellDef>
+      <span>Access code</span>
+    </mat-header-cell>
+    <mat-cell *matCellDef="let client">
+      <span>{{ client.ident || 'Anonymous' }}</span>
+    </mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="ip">
+    <mat-header-cell *matHeaderCellDef>
+      <span>IP address</span>
+    </mat-header-cell>
+    <mat-cell *matCellDef="let client">
+      <span>{{ client.ip }}</span>
+    </mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="connectedAt">
+    <mat-header-cell *matHeaderCellDef>
+      <span>Connected since</span>
+    </mat-header-cell>
+    <mat-cell *matCellDef="let client">
+      <span>{{ client.connectedAt | date:'MM/dd HH:mm' }}</span>
+    </mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="duration">
+    <mat-header-cell *matHeaderCellDef>
+      <span>Duration</span>
+    </mat-header-cell>
+    <mat-cell *matCellDef="let client">
+      <span>{{ duration(client.connectedAt) }}</span>
+    </mat-cell>
+  </ng-container>
+  <ng-container matColumnDef="actions">
+    <mat-header-cell *matHeaderCellDef>
+    </mat-header-cell>
+    <mat-cell *matCellDef="let client">
+      <button type="button" mat-icon-button color="warn" title="Force re-authentication" [disabled]="pending"
+        (click)="disconnect(client)">
+        <mat-icon>logout</mat-icon>
+      </button>
+    </mat-cell>
+  </ng-container>
+  <mat-header-row *matHeaderRowDef="['ident', 'ip', 'connectedAt', 'duration', 'actions']">
+  </mat-header-row>
+  <mat-row *matRowDef="let row; columns: ['ident', 'ip', 'connectedAt', 'duration', 'actions']">
+  </mat-row>
+</mat-table>
+<mat-progress-bar color="primary" [mode]="pending ? 'query' : 'determinate'">
+</mat-progress-bar>
+@if ((clients | async)?.length === 0) {
+  <p class="empty">No listeners connected.</p>
+}
+<div class="reset">
+  <button type="button" mat-raised-button [disabled]="pending" (click)="reload()">
+    Reload
+  </button>
+</div>
