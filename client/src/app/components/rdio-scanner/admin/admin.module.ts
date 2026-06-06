@@ -22,6 +22,7 @@ import { NgModule } from '@angular/core';
 import { AppSharedModule } from '../../../shared/shared.module';
 import { RdioScannerAdminComponent } from './admin.component';
 import { RdioScannerAdminService } from './admin.service';
+import { RdioScannerAdminClientsComponent } from './clients/clients.component';
 import { RdioScannerAdminConfigComponent } from './config/config.component';
 import { RdioScannerAdminAccessComponent } from './config/access/access.component';
 import { RdioScannerAdminApikeysComponent } from './config/apikeys/apikeys.component';
@@ -47,6 +48,7 @@ import { RdioScannerAdminPasswordComponent } from './tools/password/password.com
 
 @NgModule({ declarations: [
         RdioScannerAdminComponent,
+        RdioScannerAdminClientsComponent,
         RdioScannerAdminConfigComponent,
         RdioScannerAdminAccessComponent,
         RdioScannerAdminApikeysComponent,

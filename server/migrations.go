@@ -96,6 +96,49 @@ func migrateCallsDurationPeaks(db *Database) error {
 	return nil
 }
 
+// migrateAccessesDisabled adds the "disabled" column to existing "accesses"
+// tables. Fresh installs already get the column via the schema seed; this
+// upgrades databases created before access codes could be disabled.
+//
+// Column presence is checked against catalog metadata rather than a
+// `SELECT "disabled" ...` probe: SQLite's legacy double-quoted-string-literal
+// behaviour makes such a probe silently succeed (returning the literal
+// "disabled") even when the column does not exist, so it can't detect absence.
+func migrateAccessesDisabled(db *Database) error {
+	formatError := errorFormatter("migration", "migrateAccessesDisabled")
+
+	var probe string
+	switch db.Config.DbType {
+	case DbTypePostgresql:
+		probe = `SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'accesses' AND column_name = 'disabled'`
+	case DbTypeMariadb, DbTypeMysql:
+		probe = `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'accesses' AND column_name = 'disabled'`
+	default: // sqlite
+		probe = `SELECT COUNT(*) FROM pragma_table_info('accesses') WHERE name = 'disabled'`
+	}
+
+	var count int
+	if err := db.Sql.QueryRow(probe).Scan(&count); err != nil {
+		return formatError(err, probe)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	log.Println("adding accesses.disabled column...")
+
+	query := `ALTER TABLE "accesses" ADD COLUMN "disabled" integer(1) NOT NULL DEFAULT 0`
+	if db.Config.DbType != DbTypeSqlite {
+		query = `ALTER TABLE "accesses" ADD COLUMN "disabled" boolean NOT NULL DEFAULT false`
+	}
+
+	if _, err := db.Sql.Exec(query); err != nil {
+		return formatError(err, query)
+	}
+
+	return nil
+}
+
 func migrateAccesses(db *Database) error {
 	var (
 		err   error

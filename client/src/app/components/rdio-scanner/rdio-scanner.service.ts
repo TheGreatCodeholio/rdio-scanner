@@ -60,6 +60,7 @@ enum WebsocketCommand {
     LivefeedMap = 'LFM',
     Max = 'MAX',
     Pin = 'PIN',
+    Reauth = 'RAU',
     Version = 'VER',
 }
 
@@ -1287,6 +1288,16 @@ export class RdioScannerService implements OnDestroy {
                     break;
 
                 case WebsocketCommand.Pin:
+                    this.event.emit({ auth: true });
+
+                    break;
+
+                case WebsocketCommand.Reauth:
+                    // Admin forced re-authentication: drop the cached PIN so
+                    // the auth form is shown instead of silently resubmitting
+                    // the stored code.
+                    this.clearPin();
+
                     this.event.emit({ auth: true });
 
                     break;

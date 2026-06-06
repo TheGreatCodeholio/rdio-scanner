@@ -25,6 +25,7 @@ var SqliteSchema = []string{
     "accessId" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
     "code" text NOT NULL,
     "allowDownloads" integer(1) NOT NULL DEFAULT 0,
+    "disabled" integer(1) NOT NULL DEFAULT 0,
     "expiration" integer NOT NULL DEFAULT 0,
     "ident" text NOT NULL,
     "limit" integer NOT NULL DEFAULT 0,
