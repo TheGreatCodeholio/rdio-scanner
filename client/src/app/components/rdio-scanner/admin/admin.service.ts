@@ -27,6 +27,7 @@ import { AppUpdateService } from '../../../shared/update/update.service';
 export interface Access {
     id?: string;
     code?: string;
+    allowDownloads?: boolean;
     expiration?: Date;
     ident?: string;
     limit?: number;
@@ -149,6 +150,7 @@ export interface Options {
     autoPopulate?: boolean;
     branding?: string;
     dimmerDelay?: number;
+    disableDownloads?: boolean;
     disableDuplicateDetection?: boolean;
     duplicateDetectionTimeFrame?: number;
     email?: string;
@@ -484,6 +486,7 @@ export class RdioScannerAdminService implements OnDestroy {
         return this.ngFormBuilder.group({
             id: this.ngFormBuilder.nonNullable.control(access?.id),
             code: this.ngFormBuilder.nonNullable.control(access?.code, [Validators.required, this.validateAccessCode()]),
+            allowDownloads: this.ngFormBuilder.nonNullable.control(access?.allowDownloads ?? false),
             expiration: this.ngFormBuilder.nonNullable.control(access?.expiration),
             ident: this.ngFormBuilder.nonNullable.control(access?.ident, Validators.required),
             limit: this.ngFormBuilder.nonNullable.control(access?.limit),
@@ -562,6 +565,7 @@ export class RdioScannerAdminService implements OnDestroy {
             autoPopulate: this.ngFormBuilder.control(options?.autoPopulate),
             branding: this.ngFormBuilder.control(options?.branding),
             dimmerDelay: this.ngFormBuilder.control(options?.dimmerDelay, [Validators.required, Validators.min(0)]),
+            disableDownloads: this.ngFormBuilder.control(options?.disableDownloads),
             disableDuplicateDetection: this.ngFormBuilder.control(options?.disableDuplicateDetection),
             duplicateDetectionTimeFrame: this.ngFormBuilder.control(options?.duplicateDetectionTimeFrame, [Validators.required, Validators.min(0)]),
             email: this.ngFormBuilder.control(options?.email),

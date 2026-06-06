@@ -24,6 +24,7 @@ var MysqlSchema = []string{
 	`CREATE TABLE IF NOT EXISTS "accesses" (
     "accessId" bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
     "code" text NOT NULL,
+    "allowDownloads" boolean NOT NULL DEFAULT false,
     "expiration" bigint NOT NULL DEFAULT 0,
     "ident" text NOT NULL,
     "limit" integer NOT NULL DEFAULT 0,

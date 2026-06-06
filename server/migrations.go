@@ -190,6 +190,49 @@ func migrateAccesses(db *Database) error {
 	return nil
 }
 
+// migrateAccessesAllowDownloads adds the "allowDownloads" column to existing
+// "accesses" tables. Fresh installs already get the column via the schema
+// seed; this upgrades databases created before per-access download overrides.
+//
+// Column presence is checked against catalog metadata rather than a
+// `SELECT "allowDownloads" ...` probe: SQLite's legacy double-quoted-string-
+// literal behaviour makes such a probe silently succeed (returning the literal
+// "allowDownloads") even when the column does not exist.
+func migrateAccessesAllowDownloads(db *Database) error {
+	formatError := errorFormatter("migration", "migrateAccessesAllowDownloads")
+
+	var probe string
+	switch db.Config.DbType {
+	case DbTypePostgresql:
+		probe = `SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'accesses' AND column_name = 'allowDownloads'`
+	case DbTypeMariadb, DbTypeMysql:
+		probe = `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'accesses' AND column_name = 'allowDownloads'`
+	default: // sqlite
+		probe = `SELECT COUNT(*) FROM pragma_table_info('accesses') WHERE name = 'allowDownloads'`
+	}
+
+	var count int
+	if err := db.Sql.QueryRow(probe).Scan(&count); err != nil {
+		return formatError(err, probe)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	log.Println("adding accesses.allowDownloads column...")
+
+	query := `ALTER TABLE "accesses" ADD COLUMN "allowDownloads" integer(1) NOT NULL DEFAULT 0`
+	if db.Config.DbType != DbTypeSqlite {
+		query = `ALTER TABLE "accesses" ADD COLUMN "allowDownloads" boolean NOT NULL DEFAULT false`
+	}
+
+	if _, err := db.Sql.Exec(query); err != nil {
+		return formatError(err, query)
+	}
+
+	return nil
+}
+
 func migrateApikeys(db *Database) error {
 	var (
 		err   error

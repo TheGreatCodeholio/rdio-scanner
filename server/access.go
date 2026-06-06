@@ -31,13 +31,14 @@ import (
 )
 
 type Access struct {
-	Id         uint64
-	Code       string
-	Expiration uint64
-	Ident      string
-	Limit      uint
-	Order      uint
-	Systems    any
+	Id             uint64
+	Code           string
+	AllowDownloads bool
+	Expiration     uint64
+	Ident          string
+	Limit          uint
+	Order          uint
+	Systems        any
 }
 
 func NewAccess() *Access {
@@ -53,6 +54,11 @@ func (access *Access) FromMap(m map[string]any) *Access {
 	switch v := m["code"].(type) {
 	case string:
 		access.Code = v
+	}
+
+	switch v := m["allowDownloads"].(type) {
+	case bool:
+		access.AllowDownloads = v
 	}
 
 	switch v := m["expiration"].(type) {
@@ -137,10 +143,11 @@ func (access *Access) MarshalJSON() ([]byte, error) {
 	}
 
 	m := map[string]any{
-		"id":      access.Id,
-		"code":    code,
-		"ident":   access.Ident,
-		"systems": access.Systems,
+		"id":             access.Id,
+		"code":           code,
+		"allowDownloads": access.AllowDownloads,
+		"ident":          access.Ident,
+		"systems":        access.Systems,
 	}
 
 	if access.Expiration > 0 {
@@ -165,10 +172,11 @@ func (access *Access) MarshalJSON() ([]byte, error) {
 // without re-entry preserves the existing DB row.
 func (access *Access) ToAdminMap(secret string) map[string]any {
 	m := map[string]any{
-		"id":      access.Id,
-		"code":    CredentialForDisplay(secret, access.Code),
-		"ident":   access.Ident,
-		"systems": access.Systems,
+		"id":             access.Id,
+		"code":           CredentialForDisplay(secret, access.Code),
+		"allowDownloads": access.AllowDownloads,
+		"ident":          access.Ident,
+		"systems":        access.Systems,
 	}
 
 	if access.Expiration > 0 {
@@ -344,7 +352,7 @@ func (accesses *Accesses) Read(db *Database) error {
 
 	formatError := errorFormatter("accesses", "read")
 
-	query = `SELECT "accessId", "code", "expiration", "ident", "limit", "order", "systems" FROM "accesses"`
+	query = `SELECT "accessId", "code", "allowDownloads", "expiration", "ident", "limit", "order", "systems" FROM "accesses"`
 	if rows, err = db.Sql.Query(query); err != nil {
 		return formatError(err, query)
 	}
@@ -355,7 +363,7 @@ func (accesses *Accesses) Read(db *Database) error {
 			systems string
 		)
 
-		if err = rows.Scan(&access.Id, &access.Code, &access.Expiration, &access.Ident, &access.Limit, &access.Order, &systems); err != nil {
+		if err = rows.Scan(&access.Id, &access.Code, &access.AllowDownloads, &access.Expiration, &access.Ident, &access.Limit, &access.Order, &systems); err != nil {
 			break
 		}
 
@@ -495,9 +503,9 @@ func (accesses *Accesses) Write(db *Database, secret string) error {
 
 		if count == 0 {
 			if db.Config.DbType == DbTypePostgresql {
-				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "expiration", "ident", "limit", "order", "systems") VALUES ($1, %d, $2, %d, %d, $3)`, access.Expiration, access.Limit, access.Order)
+				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "allowDownloads", "expiration", "ident", "limit", "order", "systems") VALUES ($1, %t, %d, $2, %d, %d, $3)`, access.AllowDownloads, access.Expiration, access.Limit, access.Order)
 			} else {
-				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "expiration", "ident", "limit", "order", "systems") VALUES (?, %d, ?, %d, %d, ?)`, access.Expiration, access.Limit, access.Order)
+				query = fmt.Sprintf(`INSERT INTO "accesses" ("code", "allowDownloads", "expiration", "ident", "limit", "order", "systems") VALUES (?, %t, %d, ?, %d, %d, ?)`, access.AllowDownloads, access.Expiration, access.Limit, access.Order)
 			}
 			if _, err = tx.Exec(query, access.Code, access.Ident, systems); err != nil {
 				break
@@ -505,9 +513,9 @@ func (accesses *Accesses) Write(db *Database, secret string) error {
 
 		} else {
 			if db.Config.DbType == DbTypePostgresql {
-				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = $1, "expiration" = %d, "ident" = $2, "limit" = %d, "order" = %d, "systems" = $3 WHERE "accessId" = %d`, access.Expiration, access.Limit, access.Order, access.Id)
+				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = $1, "allowDownloads" = %t, "expiration" = %d, "ident" = $2, "limit" = %d, "order" = %d, "systems" = $3 WHERE "accessId" = %d`, access.AllowDownloads, access.Expiration, access.Limit, access.Order, access.Id)
 			} else {
-				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = ?, "expiration" = %d, "ident" = ?, "limit" = %d, "order" = %d, "systems" = ? WHERE "accessId" = %d`, access.Expiration, access.Limit, access.Order, access.Id)
+				query = fmt.Sprintf(`UPDATE "accesses" SET "code" = ?, "allowDownloads" = %t, "expiration" = %d, "ident" = ?, "limit" = %d, "order" = %d, "systems" = ? WHERE "accessId" = %d`, access.AllowDownloads, access.Expiration, access.Limit, access.Order, access.Id)
 			}
 			if _, err = tx.Exec(query, access.Code, access.Ident, systems); err != nil {
 				break

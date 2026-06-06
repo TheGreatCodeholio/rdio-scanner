@@ -209,6 +209,10 @@ func (client *Client) SendConfig(groups *Groups, options *Options, systems *Syst
 		"alerts":             Alerts,
 		"branding":           options.Branding,
 		"dimmerDelay":        options.DimmerDelay,
+		// Effective per-listener download state: globally disabled unless this
+		// access code carries an override. The client only learns the result,
+		// never the raw option/override.
+		"disableDownloads":   options.DisableDownloads && !client.Access.AllowDownloads,
 		"email":              options.Email,
 		"groups":             client.GroupsMap,
 		"groupsData":         client.GroupsData,
